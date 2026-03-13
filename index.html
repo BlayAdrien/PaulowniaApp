@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<!--
+  SUIVI DE CHAMP D'ARBRES — PWA v6.0  |  Licence MIT
+  Données: localStorage "arbre-v5"
+  Mise à jour: remplacer le fichier HTML — données intactes
+  
+  INSTALLATION COMME APP :
+  iOS     → Safari → bouton Partager → "Sur l'écran d'accueil"
+  Android → Chrome → menu ⋮ → "Ajouter à l'écran d'accueil"
+-->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Paulownia App">
+<meta name="theme-color" content="#2c1f0e">
+<link id="apple-touch-icon" rel="apple-touch-icon" sizes="180x180">
+<link id="pwa-icon" rel="icon" type="image/png" sizes="192x192">
+<title>Paulownia App</title>
+<script>
+// Génère l'icône app inline (arbre sur fond vert/marron) sans fichier externe
+(function(){
+  try {
+    const c=document.createElement('canvas'); c.width=192; c.height=192;
+    const x=c.getContext('2d');
+    const r=36;
+    x.beginPath(); x.moveTo(r,0); x.lineTo(192-r,0); x.arcTo(192,0,192,r,r);
+    x.lineTo(192,192-r); x.arcTo(192,192,192-r,192,r);
+    x.lineTo(r,192); x.arcTo(0,192,0,192-r,r);
+    x.lineTo(0,r); x.arcTo(0,0,r,0,r); x.closePath();
+    const g=x.createLinearGradient(0,0,192,192);
+    g.addColorStop(0,'#3d6b47'); g.addColorStop(1,'#2c1f0e');
+    x.fillStyle=g; x.fill();
+    x.fillStyle='#7a4a1a'; x.beginPath(); x.roundRect(86,120,20,48,4); x.fill();
+    x.fillStyle='#22a03a'; x.beginPath(); x.ellipse(96,86,56,52,0,0,Math.PI*2); x.fill();
+    x.fillStyle='#4dc460'; x.beginPath(); x.ellipse(96,86,56,52,0,0,Math.PI*2); x.fill();
+    x.fillStyle='rgba(255,255,255,0.18)'; x.beginPath(); x.ellipse(78,68,22,17,-0.4,0,Math.PI*2); x.fill();
+    const url=c.toDataURL('image/png');
+    document.getElementById('apple-touch-icon').href=url;
+    document.getElementById('pwa-icon').href=url;
+  } catch(e){}
+})();
+</script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;600&family=Nunito:wght@400;600;700;800&display=swap');
+:root{
+  --soil:#2c1f0e;--bark:#5c3d1e;--barkl:#8a5e38;
+  --moss:#3d6b47;--leaf:#6db870;--cream:#f7f2e8;
+  --parch:#ede5d0;--sand:#d9cdb0;--ink:#1a1208;--blue:#3d6ea8;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Nunito',sans-serif;background:var(--soil);color:var(--ink)}
+#app{display:flex;flex-direction:column;height:100dvh}
+
+/* ── Header ── */
+#hdr{flex-shrink:0;height:52px;background:linear-gradient(135deg,var(--soil),var(--bark));display:flex;align-items:center;justify-content:space-between;padding:0 14px;z-index:50;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+#hdr h1{font-family:'Lora',serif;font-size:18px;color:var(--cream)}
+.hdr-sub{font-size:10px;color:var(--leaf);font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.hdr-l{display:flex;flex-direction:column;gap:1px}
+.hdr-btn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:var(--cream);border-radius:9px;padding:6px 12px;font-size:12px;font-family:'Nunito',sans-serif;font-weight:700;cursor:pointer}
+
+/* ── Pages ── */
+#pages{flex:1;overflow:hidden;position:relative}
+.page{position:absolute;inset:0;display:none;flex-direction:column}
+.page.active{display:flex}
+
+/* ── Tab bar ── */
+#tabs{flex-shrink:0;height:58px;background:var(--parch);display:flex;border-top:2px solid var(--sand);z-index:50}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;gap:2px}
+.ti{font-size:20px;transition:transform .2s}
+.tl{font-size:9px;font-weight:800;color:var(--barkl);letter-spacing:.05em;text-transform:uppercase}
+.tab.active .ti{transform:scale(1.18)}
+.tab.active .tl{color:var(--moss)}
+.tab.active{background:rgba(61,107,71,.09)}
+
+/* ════════════════════════
+   PAGE CHAMP
+════════════════════════ */
+#modebar{flex-shrink:0;height:40px;background:var(--parch);display:flex;align-items:center;padding:0 12px;gap:10px;border-bottom:2px solid var(--sand)}
+#mode-hint{flex:1;font-size:11px;color:var(--barkl);font-weight:600}
+#mode-toggle{padding:5px 13px;border:none;border-radius:20px;font-family:'Nunito',sans-serif;font-size:11px;font-weight:800;cursor:pointer;transition:all .2s}
+#mode-toggle.edit{background:var(--moss);color:#fff}
+#mode-toggle.view{background:var(--parch);color:var(--bark);border:1.5px solid var(--sand)}
+
+/* Canvas wrap */
+#cwrap{flex:1;position:relative;overflow:hidden;touch-action:none}
+#fc{display:block;width:100%;height:100%}
+
+/* Zoom buttons */
+#zctrl{position:fixed;bottom:72px;right:14px;display:flex;flex-direction:column;gap:5px;z-index:200}
+.zb{width:38px;height:38px;background:rgba(247,242,232,.96);border:1px solid rgba(92,61,30,.18);border-radius:10px;font-size:20px;font-weight:700;color:var(--bark);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+.zb:active{background:var(--sand)}
+#zlbl{font-size:10px;font-weight:800;color:var(--bark);text-align:center;background:rgba(247,242,232,.9);border-radius:7px;padding:2px 0;letter-spacing:.04em}
+
+/* FAB grille */
+#fab{position:fixed;bottom:72px;left:14px;width:52px;height:52px;background:linear-gradient(135deg,#c7863d,#9a5e18);border:none;border-radius:50%;font-size:22px;color:#fff;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.35);z-index:200;display:flex;align-items:center;justify-content:center}
+#fab:active{transform:scale(.9)}
+
+/* Légende */
+#legend{position:absolute;top:8px;left:8px;background:rgba(247,242,232,.94);border-radius:9px;padding:7px 10px;z-index:10;border:1px solid rgba(92,61,30,.12)}
+.lr{display:flex;align-items:center;gap:5px;margin-bottom:3px;font-size:9px;font-weight:700;color:var(--bark)}
+.lr:last-child{margin-bottom:0}
+.ld{width:10px;height:10px;border-radius:50%}
+
+/* ════════════════════════
+   PAGE LISTE
+════════════════════════ */
+#page-list{background:var(--parch)}
+.lscroll{flex:1;overflow-y:auto;padding:11px 13px 18px}
+.srow{display:flex;gap:9px;margin-bottom:12px}
+.sc{flex:1;background:var(--cream);border-radius:13px;padding:11px 8px;text-align:center;box-shadow:0 3px 12px rgba(28,18,8,.1)}
+.sn{font-family:'Lora',serif;font-size:24px;color:var(--moss);line-height:1}
+.sl{font-size:9px;color:var(--barkl);font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-top:3px}
+.li{background:var(--cream);border-radius:13px;padding:12px 13px;margin-bottom:8px;display:flex;align-items:center;gap:11px;box-shadow:0 2px 8px rgba(28,18,8,.09);cursor:pointer}
+.li:active{transform:scale(.98)}
+.linfo{flex:1;min-width:0}
+.lname{font-family:'Lora',serif;font-size:15px;color:var(--soil)}
+.lmeta{font-size:11px;color:var(--barkl);margin-top:2px}
+.lpos{font-size:10px;color:var(--barkl);opacity:.55;margin-top:1px}
+.empty{text-align:center;padding:55px 18px;color:var(--barkl)}
+.empty .ei{font-size:48px;margin-bottom:12px}
+.empty p{font-size:14px;line-height:1.7}
+
+/* ════════════════════════
+   PAGE JOURNAL
+════════════════════════ */
+#page-journal{background:var(--parch)}
+.jtb{flex-shrink:0;padding:9px 13px;background:var(--cream);border-bottom:1px solid var(--sand);display:flex;gap:7px;align-items:center}
+.jtb input{flex:1;background:var(--parch);border:1.5px solid var(--sand);border-radius:9px;padding:8px 11px;font-family:'Nunito',sans-serif;font-size:14px;color:var(--ink);outline:none}
+.jtb input:focus{border-color:var(--moss)}
+.btn-aj{padding:8px 13px;background:var(--moss);border:none;border-radius:9px;color:#fff;font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap}
+#jtoc{flex-shrink:0;background:var(--cream);border-bottom:1px solid var(--sand);overflow-x:auto;display:flex;gap:5px;padding:7px 13px;scrollbar-width:none}
+#jtoc::-webkit-scrollbar{display:none}
+.tchip{flex-shrink:0;padding:4px 11px;border-radius:20px;font-size:10px;font-weight:800;background:var(--parch);color:var(--bark);cursor:pointer;border:1.5px solid transparent;white-space:nowrap}
+.tchip:active{background:var(--moss);color:#fff}
+.jscroll{flex:1;overflow-y:auto;padding:12px 13px 18px}
+.je{background:var(--cream);border-radius:13px;margin-bottom:10px;overflow:hidden;box-shadow:0 2px 8px rgba(28,18,8,.09)}
+.jeh{padding:11px 13px 9px;border-bottom:1px solid var(--parch)}
+.jecat{display:inline-block;font-size:9px;font-weight:800;color:#fff;background:var(--moss);padding:2px 7px;border-radius:4px;letter-spacing:.05em;text-transform:uppercase;margin-bottom:3px}
+.jetit{font-family:'Lora',serif;font-size:15px;color:var(--soil)}
+.jedate{font-size:10px;color:var(--barkl);margin-top:2px}
+.jebody{padding:10px 13px;font-size:13px;line-height:1.7;color:var(--ink);white-space:pre-wrap;word-break:break-word}
+.jeact{padding:7px 13px;display:flex;justify-content:flex-end;gap:7px;border-top:1px solid var(--parch)}
+.ja{background:none;border:none;font-size:12px;color:var(--barkl);cursor:pointer;padding:3px 7px;border-radius:7px;font-family:'Nunito',sans-serif;font-weight:700}
+.ja.del{color:#b84c4c}
+
+/* ════════════════════════
+   PAGE MÉTÉO
+════════════════════════ */
+#page-meteo{background:var(--parch)}
+.mtb{flex-shrink:0;padding:9px 13px;background:var(--cream);border-bottom:1px solid var(--sand);display:flex;align-items:center;gap:9px}
+.mtb span{font-family:'Lora',serif;font-size:15px;color:var(--soil);flex:1}
+.btn-am{padding:8px 13px;background:var(--blue);border:none;border-radius:9px;color:#fff;font-family:'Nunito',sans-serif;font-size:12px;font-weight:800;cursor:pointer}
+.mscroll{flex:1;overflow-y:auto;padding:12px 13px 18px}
+.msum{background:var(--cream);border-radius:13px;padding:13px 15px;margin-bottom:12px;box-shadow:0 2px 8px rgba(28,18,8,.09)}
+.mstit{font-family:'Lora',serif;font-size:14px;color:var(--soil);margin-bottom:9px}
+.mbars{display:flex;gap:3px;align-items:flex-end;height:46px}
+.mbw{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px}
+.mb{width:100%;background:linear-gradient(180deg,#5b8dd9,#3d6ea8);border-radius:3px 3px 0 0;min-height:2px}
+.mbl{font-size:7px;color:var(--barkl);font-weight:700}
+.mc{background:var(--cream);border-radius:13px;margin-bottom:9px;overflow:hidden;box-shadow:0 2px 8px rgba(28,18,8,.09)}
+.mch{padding:11px 13px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--parch);flex-wrap:wrap}
+.mcper{background:var(--blue);color:#fff;border-radius:9px;padding:4px 10px;font-size:11px;font-weight:800;white-space:nowrap}
+.mcico{font-size:18px;flex-shrink:0}
+.mcsum{font-size:12px;color:var(--bark);flex:1;min-width:0}
+.mcdel{background:none;border:none;font-size:11px;color:#b84c4c;cursor:pointer;padding:2px 5px;font-family:'Nunito',sans-serif;font-weight:700;flex-shrink:0}
+.mcb{padding:9px 13px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+.mfl{font-size:9px;font-weight:800;color:var(--barkl);text-transform:uppercase;letter-spacing:.05em}
+.mfv{font-size:15px;font-weight:800;color:var(--soil)}
+.mfu{font-size:9px;color:var(--barkl)}
+.mcnotes{padding:7px 13px 11px;font-size:12px;color:var(--ink);line-height:1.6;border-top:1px solid var(--parch);white-space:pre-wrap}
+
+/* ════════════════════════
+   SHEETS (modals bas)
+════════════════════════ */
+.ov{display:none;position:fixed;inset:0;background:rgba(28,18,8,.6);backdrop-filter:blur(5px);z-index:200;align-items:flex-end}
+.ov.open{display:flex}
+.sh{width:100%;background:var(--cream);border-radius:20px 20px 0 0;animation:sup .3s cubic-bezier(.32,.72,0,1);max-height:90dvh;overflow-y:auto}
+@keyframes sup{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.shh{width:34px;height:4px;background:rgba(92,61,30,.2);border-radius:2px;margin:11px auto 0}
+.shhdr{display:flex;align-items:center;justify-content:space-between;padding:13px 17px 11px;border-bottom:1px solid var(--sand)}
+.shtit{font-family:'Lora',serif;font-size:19px;color:var(--soil)}
+.shx{width:28px;height:28px;background:rgba(92,61,30,.1);border:none;border-radius:50%;font-size:14px;color:var(--bark);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.fb{padding:14px 17px}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px}
+.fr.full{grid-template-columns:1fr}
+.fld{display:flex;flex-direction:column;gap:4px}
+.fld label{font-size:10px;font-weight:800;color:var(--barkl);text-transform:uppercase;letter-spacing:.07em}
+.fld input,.fld select,.fld textarea{font-family:'Nunito',sans-serif;font-size:15px;color:var(--ink);background:var(--parch);border:1.5px solid var(--sand);border-radius:10px;padding:9px 12px;outline:none;width:100%;-webkit-appearance:none;transition:border-color .2s}
+.fld input:focus,.fld select:focus,.fld textarea:focus{border-color:var(--moss)}
+.fld textarea{height:84px;resize:none}
+.hrow{display:flex;gap:7px}
+.hchip{flex:1;padding:9px 3px;border:2px solid transparent;border-radius:10px;background:var(--parch);text-align:center;font-size:17px;cursor:pointer;transition:all .13s}
+.hchip span{display:block;font-size:9px;font-weight:800;color:var(--barkl);margin-top:2px;letter-spacing:.03em}
+.hchip.sel{border-color:var(--moss);background:rgba(61,107,71,.1)}
+.brow{display:flex;flex-direction:column;gap:8px;padding:0 17px 26px}
+.bp{padding:14px;background:linear-gradient(135deg,var(--moss),#2a4d30);border:none;border-radius:12px;color:#fff;font-family:'Nunito',sans-serif;font-size:15px;font-weight:800;cursor:pointer}
+.bp:active{transform:scale(.97)}
+.bd{padding:12px;background:none;border:1.5px solid #b84c4c;border-radius:12px;color:#b84c4c;font-family:'Nunito',sans-serif;font-size:14px;font-weight:700;cursor:pointer}
+.bs{padding:12px;background:var(--parch);border:1.5px solid var(--sand);border-radius:12px;color:var(--bark);font-family:'Nunito',sans-serif;font-size:14px;font-weight:600;cursor:pointer}
+.hblock{padding:0 17px 14px}
+.hlbl{font-size:10px;font-weight:800;color:var(--barkl);text-transform:uppercase;letter-spacing:.07em;padding-top:12px;border-top:1px solid var(--sand);margin-bottom:9px}
+.hi{background:var(--parch);border-radius:9px;padding:8px 11px;margin-bottom:6px;border-left:3px solid var(--moss)}
+.hid{font-size:10px;font-weight:700;color:var(--barkl)}
+.hib{font-size:12px;color:var(--ink);margin-top:2px;line-height:1.5}
+.pbadge{display:inline-flex;align-items:center;gap:4px;margin:5px 17px 0;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:800;letter-spacing:.04em}
+.pbg{background:rgba(61,107,71,.12);color:var(--moss)}
+.pbf{background:rgba(199,134,61,.12);color:#a06520}
+
+/* Grille */
+.rcard{margin:12px 17px 0;background:var(--parch);border-radius:12px;padding:12px 14px;display:flex;gap:11px;align-items:center}
+.rico{font-size:28px}
+.rcnt{font-family:'Lora',serif;font-size:21px;color:var(--moss)}
+.rdet{font-size:11px;color:var(--barkl);margin-top:2px;line-height:1.5}
+.cbody{padding:20px 17px 0;text-align:center}
+.cico{font-size:42px;margin-bottom:9px}
+.ctit{font-family:'Lora',serif;font-size:19px;color:var(--soil);margin-bottom:7px}
+.ctxt{font-size:13px;color:var(--bark);line-height:1.7}
+.cbtns{display:flex;flex-direction:column;gap:8px;padding:16px 17px 0}
+
+/* Météo form */
+.wpick{display:flex;gap:7px;flex-wrap:wrap}
+.wpb{width:42px;height:42px;font-size:22px;border:2px solid transparent;border-radius:9px;background:var(--parch);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.wpb.sel{border-color:var(--blue);background:rgba(61,110,168,.1)}
+/* Sélecteur de période */
+.prow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px}
+.ptb{padding:6px 12px;border:1.5px solid var(--sand);border-radius:20px;font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;color:var(--bark);background:var(--parch);cursor:pointer;white-space:nowrap}
+.ptb.sel{background:var(--blue);color:#fff;border-color:var(--blue)}
+
+/* Réglages */
+.scfgr{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--sand)}
+.ssw{width:22px;height:28px;border-radius:4px;flex-shrink:0}
+.sinp{flex:1;font-family:'Nunito',sans-serif;font-size:14px;color:var(--ink);background:var(--parch);border:1.5px solid var(--sand);border-radius:8px;padding:6px 10px;outline:none}
+.sinp:focus{border-color:var(--moss)}
+
+/* Toast */
+#toast{position:fixed;bottom:68px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--soil);color:var(--cream);padding:9px 20px;border-radius:20px;font-size:13px;font-weight:700;z-index:999;transition:transform .3s;white-space:nowrap;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.35)}
+#toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div id="app">
+
+<div id="hdr">
+  <div class="hdr-l">
+    <h1>🌿 Paulownia App</h1>
+    <span class="hdr-sub" id="hdr-n">0 arbres</span>
+  </div>
+  <button class="hdr-btn" onclick="openSettings()">⚙️ Réglages</button>
+</div>
+
+<div id="pages">
+
+  <!-- ── CHAMP ── -->
+  <div class="page active" id="page-champ">
+    <div id="modebar">
+      <span id="mode-hint" class="mode-hint">Touchez pour ajouter · Glissez un arbre pour déplacer</span>
+      <button id="mode-toggle" class="view" onclick="toggleView()">👁 Voir seulement</button>
+    </div>
+    <div id="cwrap">
+      <canvas id="fc"></canvas>
+      <div id="legend">
+        <div class="lr"><div class="ld" style="background:#222"></div>Mort</div>
+        <div class="lr"><div class="ld" style="background:#8a3510"></div>Mauvais</div>
+        <div class="lr"><div class="ld" style="background:#6a8e1a"></div>Moyen/Bon</div>
+        <div class="lr"><div class="ld" style="background:#22a03a"></div>Excellent</div>
+      </div>
+    </div>
+  </div>
+  <!-- Boutons flottants HORS du cwrap pour éviter le blocage touch-action:none sur iOS -->
+  <div id="zctrl">
+    <button class="zb" onclick="zIn()">＋</button>
+    <div id="zlbl">100%</div>
+    <button class="zb" onclick="zOut()">－</button>
+    <button class="zb" onclick="zReset()">⊙</button>
+  </div>
+  <button id="fab" onclick="openGrid()">⊞</button>
+
+  <!-- ── LISTE ── -->
+  <div class="page" id="page-list">
+    <div class="lscroll" id="lscroll"></div>
+  </div>
+
+  <!-- ── JOURNAL ── -->
+  <div class="page" id="page-journal">
+    <div class="jtb">
+      <input type="text" id="jsearch" placeholder="Rechercher…" oninput="renderJ()">
+      <button class="btn-aj" onclick="openJF()">＋ Entrée</button>
+    </div>
+    <div id="jtoc"></div>
+    <div class="jscroll" id="jscroll"></div>
+  </div>
+
+  <!-- ── MÉTÉO ── -->
+  <div class="page" id="page-meteo">
+    <div class="mtb">
+      <span>Relevés météo</span>
+      <button class="btn-am" onclick="openMF()">＋ Relevé</button>
+    </div>
+    <div class="mscroll" id="mscroll"></div>
+  </div>
+
+</div><!-- /pages -->
+
+<div id="tabs">
+  <button class="tab active" data-p="page-champ"   onclick="goTab(this,'page-champ')"><span class="ti">🗺️</span><span class="tl">Champ</span></button>
+  <button class="tab"        data-p="page-list"    onclick="goTab(this,'page-list')"><span class="ti">📋</span><span class="tl">Liste</span></button>
+  <button class="tab"        data-p="page-journal" onclick="goTab(this,'page-journal')"><span class="ti">📓</span><span class="tl">Journal</span></button>
+  <button class="tab"        data-p="page-meteo"   onclick="goTab(this,'page-meteo')"><span class="ti">🌦️</span><span class="tl">Météo</span></button>
+</div>
+</div><!-- /app -->
+
+<!-- ══════════ SHEET ARBRE ══════════ -->
+<div class="ov" id="ov-tree">
+  <div class="sh">
+    <div class="shh"></div>
+    <div class="shhdr"><span class="shtit" id="tp-tit">Arbre</span><button class="shx" onclick="closeTP()">✕</button></div>
+    <div id="tp-badge"></div>
+    <div class="fb">
+      <div class="fr"><div class="fld"><label>Nom / ID</label><input id="f-name" placeholder="ex: A-01"></div><div class="fld"><label>Espèce</label><input id="f-esp" placeholder="ex: Chêne"></div></div>
+      <div class="fr"><div class="fld"><label>Hauteur (cm)</label><input type="number" id="f-h" min="0" inputmode="numeric" placeholder="0"></div><div class="fld"><label>Diamètre (cm)</label><input type="number" id="f-d" min="0" inputmode="numeric" placeholder="0"></div></div>
+      <div class="fr"><div class="fld"><label>Date plantation</label><input type="date" id="f-dt"></div><div class="fld"><label>Forme couronne</label><select id="f-fr"><option value="">—</option><option>Sphérique</option><option>Conique</option><option>Étalée</option><option>Colonnaire</option><option>Pleureur</option><option>Irrégulière</option></select></div></div>
+      <div class="fr full"><div class="fld"><label>État de santé</label><div class="hrow" id="hrow"></div></div></div>
+      <div class="fr full"><div class="fld"><label>Notes</label><textarea id="f-notes" placeholder="Observations…"></textarea></div></div>
+    </div>
+    <div class="hblock" id="tp-hist"></div>
+    <div class="brow">
+      <button class="bp" onclick="saveTree()">💾 Enregistrer</button>
+      <button class="bd" onclick="delFromPanel()">🗑 Supprimer cet arbre</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SHEET GRILLE ══════════ -->
+<div class="ov" id="ov-grid">
+  <div class="sh">
+    <div class="shh"></div>
+    <div class="shhdr"><span class="shtit">⊞ Grille automatique</span><button class="shx" onclick="closeGrid()">✕</button></div>
+    <div class="fb">
+      <div class="fr"><div class="fld"><label>Largeur champ (m)</label><input type="number" id="g-fw" value="50" min="1" inputmode="decimal" oninput="liveCalc()"></div><div class="fld"><label>Profondeur (m)</label><input type="number" id="g-fh" value="40" min="1" inputmode="decimal" oninput="liveCalc()"></div></div>
+      <div class="fr"><div class="fld"><label>Espacement X (m)</label><input type="number" id="g-sx" value="5" min="0.5" step="0.5" inputmode="decimal" oninput="liveCalc()"></div><div class="fld"><label>Espacement Y (m)</label><input type="number" id="g-sy" value="5" min="0.5" step="0.5" inputmode="decimal" oninput="liveCalc()"></div></div>
+    </div>
+    <div class="rcard"><div class="rico">🌲</div><div><div class="rcnt" id="g-cnt">—</div><div class="rdet" id="g-det">—</div></div></div>
+    <div class="brow" style="margin-top:13px"><button class="bs" onclick="previewGrid()">👁 Aperçu</button><button class="bp" onclick="askPlace()">✅ Placer</button></div>
+    <div style="height:4px"></div>
+  </div>
+</div>
+
+<!-- ══════════ SHEET CONFIRM ══════════ -->
+<div class="ov" id="ov-conf">
+  <div class="sh">
+    <div class="shh"></div>
+    <div class="cbody"><div class="cico">🌳</div><div class="ctit" id="c-tit">Placer</div><div class="ctxt" id="c-txt"></div></div>
+    <div class="cbtns">
+      <button class="bp" onclick="doPlace(false)">➕ Ajouter aux arbres existants</button>
+      <button class="bd" id="btn-repl" onclick="doPlace(true)">🗑 Remplacer tous les arbres</button>
+      <button class="bs" onclick="closeConf()">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SHEET JOURNAL ══════════ -->
+<div class="ov" id="ov-jf">
+  <div class="sh">
+    <div class="shh"></div>
+    <div class="shhdr"><span class="shtit" id="jf-tit">📓 Nouvelle entrée</span><button class="shx" onclick="closeJF()">✕</button></div>
+    <div class="fb">
+      <div class="fr full"><div class="fld"><label>Catégorie</label><input id="jf-cat" placeholder="Taille, Traitement…"></div></div>
+      <div class="fr full"><div class="fld"><label>Titre</label><input id="jf-titl" placeholder="ex: Première taille de formation"></div></div>
+      <div class="fr full"><div class="fld"><label>Contenu</label><textarea id="jf-body" style="height:120px" placeholder="Détails…"></textarea></div></div>
+      <div class="fr"><div class="fld"><label>Date</label><input type="date" id="jf-date"></div><div class="fld"><label>Arbres concernés</label><input id="jf-trees" placeholder="ex: 1, 2, 5…"></div></div>
+    </div>
+    <div class="brow"><button class="bp" onclick="saveJE()">💾 Enregistrer</button></div>
+  </div>
+</div>
+
+<!-- ══════════ SHEET MÉTÉO ══════════ -->
+<div class="ov" id="ov-mf">
+  <div class="sh">
+    <div class="shh"></div>
+    <div class="shhdr"><span class="shtit">🌦️ Nouveau relevé</span><button class="shx" onclick="closeMF()">✕</button></div>
+    <div class="fb">
+      <!-- Type de période -->
+      <div class="fr full">
+        <div class="fld">
+          <label>Type de période</label>
+          <div class="prow">
+            <button class="ptb sel" data-pt="day"   onclick="selPT(this)">Journée</button>
+            <button class="ptb"     data-pt="week"  onclick="selPT(this)">Semaine</button>
+            <button class="ptb"     data-pt="range" onclick="selPT(this)">Période libre</button>
+          </div>
+        </div>
+      </div>
+      <div id="pf-day"   class="fr full"><div class="fld"><label>Date</label><input type="date" id="mf-d1"></div></div>
+      <div id="pf-week"  class="fr full" style="display:none"><div class="fld"><label>Semaine — choisir le lundi</label><input type="date" id="mf-wk"></div></div>
+      <div id="pf-range" style="display:none"><div class="fr"><div class="fld"><label>Du</label><input type="date" id="mf-fr"></div><div class="fld"><label>Au</label><input type="date" id="mf-to"></div></div></div>
+      <!-- Météo -->
+      <div class="fr full"><div class="fld"><label>Temps</label><div class="wpick">
+        <button class="wpb" data-w="☀️" onclick="selW(this)">☀️</button>
+        <button class="wpb" data-w="⛅" onclick="selW(this)">⛅</button>
+        <button class="wpb" data-w="☁️" onclick="selW(this)">☁️</button>
+        <button class="wpb" data-w="🌧️" onclick="selW(this)">🌧️</button>
+        <button class="wpb" data-w="⛈️" onclick="selW(this)">⛈️</button>
+        <button class="wpb" data-w="🌨️" onclick="selW(this)">🌨️</button>
+        <button class="wpb" data-w="🌫️" onclick="selW(this)">🌫️</button>
+        <button class="wpb" data-w="💨" onclick="selW(this)">💨</button>
+      </div></div></div>
+      <div class="fr"><div class="fld"><label>T° min (°C)</label><input type="number" id="mf-tmin" inputmode="decimal"></div><div class="fld"><label>T° max (°C)</label><input type="number" id="mf-tmax" inputmode="decimal"></div></div>
+      <div class="fr"><div class="fld"><label>Précip. (mm)</label><input type="number" id="mf-rain" min="0" inputmode="decimal"></div><div class="fld"><label>Humidité (%)</label><input type="number" id="mf-hum" min="0" max="100" inputmode="numeric"></div></div>
+      <div class="fr"><div class="fld"><label>Vent (km/h)</label><input type="number" id="mf-wind" min="0" inputmode="numeric"></div><div class="fld"><label>Soleil (h)</label><input type="number" id="mf-sun" min="0" max="24" step="0.5" inputmode="decimal"></div></div>
+      <div class="fr full"><div class="fld"><label>Notes</label><textarea id="mf-notes" placeholder="Gelée, grêle, vent fort…"></textarea></div></div>
+    </div>
+    <div class="brow"><button class="bp" onclick="saveME()">💾 Enregistrer</button></div>
+  </div>
+</div>
+
+<!-- ══════════ SHEET RÉGLAGES ══════════ -->
+<div class="ov" id="ov-set">
+  <div class="sh">
+    <div class="shh"></div>
+    <div class="shhdr"><span class="shtit">⚙️ Réglages</span><button class="shx" onclick="closeSettings()">✕</button></div>
+    <div class="fb">
+      <p style="font-size:13px;color:var(--bark);margin-bottom:13px;line-height:1.6">Renommez les niveaux d'état de santé :</p>
+      <div id="scfg"></div>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--sand)">
+        <p style="font-size:10px;font-weight:800;color:var(--barkl);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px">Sauvegarde des données</p>
+        <p style="font-size:12px;color:var(--bark);line-height:1.6;margin-bottom:12px">Exportez vos données avant une mise à jour du fichier HTML, puis réimportez-les après.</p>
+        <div style="display:flex;gap:8px">
+          <button class="bp" style="flex:1;padding:11px 8px;font-size:13px" onclick="exportJSON()">📦 Exporter JSON</button>
+          <button class="bs" style="flex:1;padding:11px 8px;font-size:13px" onclick="importJSON()">📥 Importer JSON</button>
+        </div>
+      </div>
+    </div>
+    <div class="brow">
+      <button class="bp" onclick="saveSettings()">💾 Sauvegarder réglages</button>
+      <button class="bd" onclick="exportCSV()">📊 Exporter CSV arbres</button>
+      <button class="bs" onclick="clearAll()">⚠️ Réinitialiser toutes les données</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════
+   DONNÉES & PERSISTANCE
+   Clé "arbre-v5" — indépendante du fichier HTML
+   ═══════════════════════════════════════ */
+const STORE = 'arbre-v5';
+
+const DEF_HEALTH = [
+  {key:'mort',    label:'Mort',      emoji:'💀', crown:'#2a2a2a', trunk:'#111'},
+  {key:'mauvais', label:'Mauvais',   emoji:'🪵', crown:'#8a3510', trunk:'#5a1e05'},
+  {key:'moyen',   label:'Moyen/Bon', emoji:'🌿', crown:'#6a8e1a', trunk:'#3a4e08'},
+  {key:'excel',   label:'Excellent', emoji:'🌟', crown:'#22a03a', trunk:'#0a5020'},
+];
+
+let D = {trees:[], journal:[], meteo:[], health:JSON.parse(JSON.stringify(DEF_HEALTH))};
+// Dimensions du champ en mètres
+let FW = 50, FH = 40;
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE);
+    if (!raw) return;
+    const p = JSON.parse(raw);
+    if (p.trees)   D.trees   = p.trees;
+    if (p.journal) D.journal = p.journal;
+    if (p.meteo)   D.meteo   = p.meteo;
+    if (p.health)  D.health  = p.health;
+    if (p.fw)      FW = p.fw;
+    if (p.fh)      FH = p.fh;
+  } catch(e) {}
+}
+const save = () => localStorage.setItem(STORE, JSON.stringify({...D, fw:FW, fh:FH}));
+
+/* ═══ UTILS ═══ */
+const uid   = () => Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+const today = () => new Date().toISOString().slice(0,10);
+const fmt   = d  => d ? new Date(d+'T12:00:00').toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}) : '';
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove('show'), 2600);
+}
+function updHdr() {
+  document.getElementById('hdr-n').textContent = `${D.trees.length} arbre${D.trees.length!==1?'s':''}`;
+}
+
+/* Numérotation par colonne — chaque colonne redémarre à 1.
+   On regroupe les arbres dont xm est à moins de 1m les uns des autres,
+   puis dans chaque colonne on numérote du haut vers le bas. */
+function renumber() {
+  if (!D.trees.length) return;
+  const sorted = [...D.trees].sort((a,b) => a.xm!==b.xm ? a.xm-b.xm : a.ym-b.ym);
+  const cols = [];
+  sorted.forEach(t => {
+    const last = cols[cols.length-1];
+    if (!last || Math.abs(t.xm - last[0].xm) > 1.0) cols.push([t]);
+    else last.push(t);
+  });
+  cols.forEach(col => {
+    col.sort((a,b)=>a.ym-b.ym).forEach((t,i) => {
+      const real = D.trees.find(x=>x.id===t.id);
+      if (real) real._n = i+1;
+    });
+  });
+}
+
+/* ═══ NAVIGATION ═══ */
+function goTab(btn, pid) {
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(pid).classList.add('active');
+  // Afficher les boutons flottants seulement sur la page Champ
+  const onChamp = pid === 'page-champ';
+  document.getElementById('fab').style.display   = onChamp ? 'flex' : 'none';
+  document.getElementById('zctrl').style.display = onChamp ? 'flex' : 'none';
+  if(pid==='page-list')    renderList();
+  if(pid==='page-journal') renderJ();
+  if(pid==='page-meteo')   renderM();
+}
+
+/* ═══════════════════════════════════════
+   CANVAS ENGINE
+   
+   Les arbres sont stockés en mètres (xm, ym).
+   Le canvas convertit mètres → pixels via :
+     px = panX + margin + xm * pxPerM * zoom
+     py = panY + margin + ym * pxPerM * zoom
+   
+   RÈGLE CLEF DU ZOOM :
+   La taille de l'icône arbre EST proportionnelle à zoom.
+   Donc si zoom double, les icônes doublent ET l'espace entre eux double.
+   → Tout s'étire de façon cohérente.
+   ═══════════════════════════════════════ */
+const canvas = document.getElementById('fc');
+const ctx    = canvas.getContext('2d');
+const MARGIN = 28; // px CSS de marge autour du champ au zoom=1
+
+/* ─── ECHELLE ───────────────────────────────────────────────────
+   Principe :
+   - zoom = 1 toujours au départ (pas de dézoom initial)
+   - pxPerM s'adapte pour que l'ESPACEMENT entre arbres soit ~90px
+     → à zoom=1 les arbres sont toujours bien visibles
+   - quand on zoom ×2, tout double (arbres ET espaces) → cohérent
+   - on peut dézoom pour voir plus, zoom pour voir les détails
+   ─────────────────────────────────────────────────────────────── */
+let zoom = 1.0;
+let panX = 0, panY = 0;
+let pxPerM = 18; // recalculé par calcPxPerM()
+
+/* Cible : espacement entre arbres adjacent ≈ TARGET_PX pixels à zoom=1.
+   Si pas d'arbres détectés, on utilise 5m comme espacement par défaut. */
+const TARGET_PX = 90; // pixels entre deux arbres à zoom=1
+
+function calcPxPerM() {
+  const spacing = detectSpacing(); // mètres
+  pxPerM = TARGET_PX / spacing;
+  // Pas de réinitialisation du zoom ni du pan ici —
+  // appelé au resize, on garde la position de l'utilisateur
+}
+
+/* Au placement d'une nouvelle grille : recalcule pxPerM ET remet zoom=1, pan=0 */
+function fitToScreen() {
+  calcPxPerM();
+  zoom = 1.0;
+  panX = 0; panY = 0;
+}
+
+/* Espacement moyen entre colonnes d'arbres (en mètres).
+   Retourne 5 par défaut si pas assez d'arbres. */
+function detectSpacing() {
+  if (D.trees.length < 2) return 5;
+  const xs = [...new Set(D.trees.map(t => Math.round(t.xm * 2) / 2))].sort((a,b)=>a-b);
+  if (xs.length < 2) return 5;
+  const diffs = [];
+  for (let i = 1; i < Math.min(xs.length, 8); i++) {
+    const d = xs[i] - xs[i-1];
+    if (d > 0.3) diffs.push(d);
+  }
+  if (!diffs.length) return 5;
+  return diffs.reduce((a,b)=>a+b,0) / diffs.length;
+}
+
+/* Convertit mètres → pixels CSS (incluant pan et zoom) */
+function m2c(xm, ym) {
+  return {
+    cx: panX + MARGIN + xm * pxPerM * zoom,
+    cy: panY + MARGIN + ym * pxPerM * zoom,
+  };
+}
+/* Inverse : pixels CSS (ex clic) → mètres */
+function c2m(cx, cy) {
+  return {
+    xm: (cx - panX - MARGIN) / (pxPerM * zoom),
+    ym: (cy - panY - MARGIN) / (pxPerM * zoom),
+  };
+}
+
+/*
+  Rayon de l'icône arbre en pixels CSS.
+  
+  BASE = pxPerM * 0.35  → l'arbre "adulte" occupe 35% d'un mètre de rayon.
+  Avec TARGET_PX=90 et spacing=5m → pxPerM=18 → base = 18*0.35 = 6.3px... trop petit.
+  
+  On utilise plutôt TARGET_PX directement : rayon adulte = TARGET_PX * 0.35 ≈ 31px.
+  C'est le rayon en pixels à zoom=1 pour un arbre adulte.
+  Les autres hauteurs sont des fractions de cette taille.
+  Tout est × zoom pour la responsivité.
+*/
+function treeRadius(hcm) {
+  const base = TARGET_PX * 0.35; // ≈31px pour adulte à zoom=1
+  const h = parseFloat(hcm) || 0;
+  let f;
+  if      (h === 0)  f = 0.80;
+  else if (h < 30)   f = 0.40;
+  else if (h < 80)   f = 0.55;
+  else if (h < 150)  f = 0.70;
+  else if (h < 250)  f = 0.85;
+  else if (h < 400)  f = 1.00;
+  else               f = 1.25;
+  return Math.max(4, base * f) * zoom;
+}
+
+function hColors(key) {
+  const h = D.health.find(x=>x.key===key);
+  return h ? {crown:h.crown, trunk:h.trunk} : {crown:'#6a8e1a', trunk:'#3a4e08'};
+}
+
+/* Dessine un arbre sur le canvas.
+   Le point d'ancrage (cx,cy) est la base du tronc.
+   La hauteur totale visuelle = tronc + couronne ≈ 2.2 * r
+*/
+function drawTree(cx, cy, r, crown, trunk, selected, label) {
+  const tw = Math.max(1.5, r * 0.20);
+  const th = r * 0.60;
+  const crx = r;
+  const cry = r * 0.85;
+  const crY = cy - th - cry * 0.55; // couronne centrée au-dessus du tronc
+
+  // Ombre portée légère (seulement si assez grand)
+  if (r > 5) {
+    ctx.beginPath();
+    ctx.ellipse(cx + r*0.15, crY + cry*0.1, crx*0.85, cry*0.3, 0.3, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(0,0,0,0.10)';
+    ctx.globalAlpha = 1;
+    ctx.fill();
+  }
+
+  // Tronc
+  ctx.beginPath();
+  ctx.roundRect(cx - tw/2, cy - th, tw, th, tw/3);
+  ctx.fillStyle = trunk;
+  ctx.globalAlpha = 0.92;
+  ctx.fill();
+
+  // Couronne
+  ctx.beginPath();
+  ctx.ellipse(cx, crY, crx, cry, 0, 0, Math.PI*2);
+  ctx.fillStyle = crown;
+  ctx.globalAlpha = 0.94;
+  ctx.fill();
+
+  // Anneau sélection
+  if (selected) {
+    ctx.beginPath();
+    ctx.ellipse(cx, crY, crx + 3, cry + 3, 0, 0, Math.PI*2);
+    ctx.strokeStyle = '#f0a030';
+    ctx.lineWidth = 2.5;
+    ctx.globalAlpha = 1;
+    ctx.stroke();
+  }
+
+  // Reflet (seulement si assez grand)
+  if (r > 4) {
+    ctx.beginPath();
+    ctx.ellipse(cx - crx*0.28, crY - cry*0.28, crx*0.32, cry*0.22, -0.4, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.globalAlpha = 1;
+    ctx.fill();
+  }
+
+  // Numéro — taille adaptée au zoom, disparaît si trop petit
+  if (label != null && r * zoom > 3) {
+    const fs = Math.max(7, Math.min(13, r * 0.7 * zoom / zoom)); // taille fixe lisible
+    ctx.font = `800 ${fs}px Nunito,sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Affiche dans la couronne si assez grand, sinon dessous
+    if (r > 9) {
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillText(String(label), cx, crY);
+    } else {
+      const ly = cy + th*0.3 + fs*0.5 + 2;
+      const tw2 = ctx.measureText(String(label)).width + 5;
+      ctx.fillStyle = 'rgba(247,242,232,0.88)';
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath(); ctx.roundRect(cx - tw2/2, ly - fs/2 - 1, tw2, fs+2, 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#5c3d1e';
+      ctx.fillText(String(label), cx, ly);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* Rendu complet du canvas */
+function render() {
+  const wrap = document.getElementById('cwrap');
+  if (!wrap || !canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+
+  // Fond
+  const grad = ctx.createLinearGradient(0,0,W,H);
+  grad.addColorStop(0,'#ece2c4'); grad.addColorStop(1,'#d8c998');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // Grille de fond (fixe, décorative)
+  ctx.strokeStyle = 'rgba(92,61,30,0.06)';
+  ctx.lineWidth = 1;
+  for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  // Bordure du champ (suit le zoom+pan)
+  const {cx:bx, cy:by} = m2c(0,0);
+  const bw = FW * pxPerM * zoom;
+  const bh = FH * pxPerM * zoom;
+  ctx.strokeStyle = 'rgba(92,61,30,0.3)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([8,5]);
+  ctx.strokeRect(bx, by, bw, bh);
+  ctx.setLineDash([]);
+
+  // Preview grille
+  if (gridPrev) {
+    ctx.strokeStyle = 'rgba(199,134,61,0.55)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([5,4]);
+    gridPrev.pos.forEach(p => {
+      const {cx,cy} = m2c(p.xm, p.ym);
+      ctx.beginPath(); ctx.arc(cx, cy, 10*zoom, 0, Math.PI*2); ctx.stroke();
+    });
+    ctx.setLineDash([]);
+  }
+
+  // Arbres
+  D.trees.forEach(t => {
+    const {cx,cy} = m2c(t.xm, t.ym);
+    const r = treeRadius(t.hauteur);
+    const {crown,trunk} = hColors(t.sante);
+    drawTree(cx, cy, r, crown, trunk, t.id===selId, t._n);
+  });
+}
+
+/* ═══ ZOOM ═══ */
+function applyZ() {
+  document.getElementById('zlbl').textContent = Math.round(zoom*100)+'%';
+  render();
+}
+function zIn()    { zoom=Math.min(8,zoom*1.35); applyZ(); }
+function zOut()   { zoom=Math.max(0.05,zoom/1.35); applyZ(); }
+function zReset() { fitToScreen(); applyZ(); }
+
+/* ═══ MODE ═══ */
+let viewOnly = false;
+function toggleView() {
+  viewOnly = !viewOnly;
+  const btn=document.getElementById('mode-toggle'), hint=document.getElementById('mode-hint');
+  if (viewOnly) {
+    btn.textContent='✏️ Mode édition'; btn.className='edit';
+    hint.textContent='Défilez et zoomez librement';
+  } else {
+    btn.textContent='👁 Voir seulement'; btn.className='view';
+    hint.textContent='Touchez pour ajouter · Glissez un arbre pour déplacer';
+  }
+}
+
+/* ═══════════════════════════════════════
+   INTERACTIONS
+   
+   Un seul mode interactif (pas de bouton Ajouter / Déplacer séparés).
+   - 2 doigts → pinch-zoom + pan centré
+   - 1 doigt sur arbre (hitbox) → drag pour déplacer
+   - 1 doigt sur vide → pan (si viewOnly) ou ajouter arbre (si pas viewOnly)
+   - Tap court sur arbre → ouvrir panel
+   - Tap court sur vide → ajouter arbre (si pas viewOnly)
+   ═══════════════════════════════════════ */
+let selId = null;
+let dragT = null;   // {id, startXm, startYm, startCX, startCY}
+let pinchS = null;  // {dist, zoom0, panX0, panY0, midX, midY}
+let panS = null;    // {x,y,panX0,panY0}
+let moved = false;
+
+/* Retourne l'arbre sous le point canvas, ou null */
+function hitTree(cx, cy) {
+  for (let i = D.trees.length-1; i >= 0; i--) {
+    const t = D.trees[i];
+    const {cx:tx, cy:ty} = m2c(t.xm, t.ym);
+    const r = treeRadius(t.hauteur);
+    // Correspondre exactement à drawTree : tronc monte, couronne au-dessus
+    const th = r * 0.60;
+    const cry = r * 0.85;
+    const crY = ty - th - cry * 0.55;
+    // Hitbox : rectangle englobant tronc + couronne
+    const dx = cx - tx;
+    const dy = cy - crY;
+    const hrx = r * 1.1;
+    const hry = (th + cry) * 0.9;
+    if ((dx*dx)/(hrx*hrx) + (dy*dy)/(hry*hry) <= 1) return t;
+  }
+  return null;
+}
+
+/* Coordonnées depuis un TouchEvent ou MouseEvent */
+function evXY(ev, idx=0) {
+  const wrap = document.getElementById('cwrap');
+  const rect = wrap.getBoundingClientRect();
+  const src = ev.touches ? ev.touches[idx] : (ev.changedTouches ? ev.changedTouches[0] : ev);
+  return {cx: src.clientX - rect.left, cy: src.clientY - rect.top};
+}
+function endXY(ev) {
+  const wrap = document.getElementById('cwrap');
+  const rect = wrap.getBoundingClientRect();
+  const src = ev.changedTouches ? ev.changedTouches[0] : ev;
+  return {cx: src.clientX - rect.left, cy: src.clientY - rect.top};
+}
+
+function initInteract() {
+  const wrap = document.getElementById('cwrap');
+
+  /* ── TOUCH START ── */
+  wrap.addEventListener('touchstart', e => {
+    e.preventDefault();
+    moved = false;
+
+    if (e.touches.length === 2) {
+      dragT = null; panS = null;
+      const a=e.touches[0], b=e.touches[1];
+      const {cx:a0}=evXY(e,0), {cy:ay0}={cy:evXY(e,0).cy};
+      const bx0=evXY(e,1).cx, by0=evXY(e,1).cy;
+      const ax0=evXY(e,0).cx, ay00=evXY(e,0).cy;
+      pinchS = {
+        dist: Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY),
+        zoom0: zoom, panX0: panX, panY0: panY,
+        midX: (a.clientX+b.clientX)/2, midY: (a.clientY+b.clientY)/2,
+      };
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      pinchS = null;
+      const {cx,cy} = evXY(e);
+      const hit = hitTree(cx,cy);
+      if (hit && !viewOnly) {
+        dragT = {id:hit.id, startXm:hit.xm, startYm:hit.ym, startCX:cx, startCY:cy};
+        panS = null;
+      } else {
+        panS = {x:cx, y:cy, panX0:panX, panY0:panY};
+        dragT = null;
+      }
+    }
+  }, {passive:false});
+
+  /* ── TOUCH MOVE ── */
+  wrap.addEventListener('touchmove', e => {
+    e.preventDefault();
+    moved = true;
+
+    if (e.touches.length === 2 && pinchS) {
+      const a=e.touches[0], b=e.touches[1];
+      const dist = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+      const scale = dist / pinchS.dist;
+      const newZ = Math.min(8, Math.max(0.2, pinchS.zoom0 * scale));
+      const mx=(a.clientX+b.clientX)/2, my=(a.clientY+b.clientY)/2;
+      const wrap2=document.getElementById('cwrap');
+      const rect=wrap2.getBoundingClientRect();
+      const cmx=mx-rect.left, cmy=my-rect.top;
+      const dmx=cmx-pinchS.midX+rect.left-rect.left, dmy=cmy-pinchS.midY;
+      // Zoom centré sur le milieu des doigts
+      panX = pinchS.panX0 + (mx-rect.left-pinchS.midX) + (pinchS.midX-rect.left-MARGIN)*(1-scale);
+      panY = pinchS.panY0 + (my-rect.top -pinchS.midY) + (pinchS.midY-rect.top -MARGIN)*(1-scale);
+      zoom = newZ;
+      applyZ();
+      return;
+    }
+
+    if (e.touches.length !== 1) return;
+    const {cx,cy} = evXY(e);
+
+    if (dragT) {
+      const t = D.trees.find(x=>x.id===dragT.id);
+      if (t) {
+        t.xm = Math.max(0, Math.min(FW, dragT.startXm + (cx-dragT.startCX)/(pxPerM*zoom)));
+        t.ym = Math.max(0, Math.min(FH, dragT.startYm + (cy-dragT.startCY)/(pxPerM*zoom)));
+        render();
+      }
+    } else if (panS) {
+      panX = panS.panX0 + (cx - panS.x);
+      panY = panS.panY0 + (cy - panS.y);
+      render();
+    }
+  }, {passive:false});
+
+  /* ── TOUCH END ── */
+  wrap.addEventListener('touchend', e => {
+    e.preventDefault();
+    if (pinchS && e.touches.length < 2) { pinchS=null; return; }
+    if (dragT) { save(); renumber(); render(); dragT=null; return; }
+    panS = null;
+
+    if (!moved) {
+      const {cx,cy} = endXY(e);
+      const hit = hitTree(cx,cy);
+      if (hit) {
+        openTP(hit.id);
+      } else if (!viewOnly) {
+        const {xm,ym} = c2m(cx,cy);
+        if (xm>=0 && xm<=FW && ym>=0 && ym<=FH) {
+          D.trees.push({id:uid(),xm,ym,name:'',espece:'',hauteur:'',diametre:'',datePlantation:'',forme:'',sante:'',notes:'',row:null,col:null,history:[]});
+          renumber(); save(); render(); updHdr();
+          toast('Arbre ajouté — appuyez dessus pour renseigner');
+        }
+      }
+    }
+  }, {passive:false});
+
+  /* ── MOUSE (desktop / test) ── */
+  let mdown=false, mmoved=false;
+  wrap.addEventListener('mousedown', e=>{
+    mdown=true; mmoved=false;
+    const {cx,cy}=evXY(e);
+    const hit=hitTree(cx,cy);
+    if(hit&&!viewOnly) dragT={id:hit.id,startXm:hit.xm,startYm:hit.ym,startCX:cx,startCY:cy};
+    else panS={x:cx,y:cy,panX0:panX,panY0:panY};
+  });
+  wrap.addEventListener('mousemove', e=>{
+    if(!mdown)return; mmoved=true;
+    const {cx,cy}=evXY(e);
+    if(dragT){const t=D.trees.find(x=>x.id===dragT.id);if(t){t.xm=Math.max(0,Math.min(FW,dragT.startXm+(cx-dragT.startCX)/(pxPerM*zoom)));t.ym=Math.max(0,Math.min(FH,dragT.startYm+(cy-dragT.startCY)/(pxPerM*zoom)));render();}}
+    else if(panS){panX=panS.panX0+(cx-panS.x);panY=panS.panY0+(cy-panS.y);render();}
+  });
+  wrap.addEventListener('mouseup', e=>{
+    mdown=false;
+    if(dragT){save();renumber();render();dragT=null;return;}
+    panS=null;
+    if(!mmoved){const {cx,cy}=endXY(e);const hit=hitTree(cx,cy);if(hit)openTP(hit.id);else if(!viewOnly){const {xm,ym}=c2m(cx,cy);if(xm>=0&&xm<=FW&&ym>=0&&ym<=FH){D.trees.push({id:uid(),xm,ym,name:'',espece:'',hauteur:'',diametre:'',datePlantation:'',forme:'',sante:'',notes:'',row:null,col:null,history:[]});renumber();save();render();updHdr();toast('Arbre ajouté');}}}
+  });
+  wrap.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const {cx,cy}=evXY(e);
+    const f=e.deltaY<0?1.15:1/1.15;
+    const nz=Math.min(8,Math.max(0.2,zoom*f));
+    panX=cx-(cx-panX)*(nz/zoom); panY=cy-(cy-panY)*(nz/zoom);
+    zoom=nz; applyZ();
+  },{passive:false});
+}
+
+/* ═══ RESIZE ═══ */
+function onResize() { calcPxPerM(); render(); }
+
+/* ═══════════════════════════════════════
+   PANEL ARBRE
+   ═══════════════════════════════════════ */
+function buildHrow(selKey) {
+  const row = document.getElementById('hrow');
+  row.innerHTML = '';
+  D.health.forEach(h=>{
+    const c=document.createElement('div');
+    c.className='hchip'+(h.key===selKey?' sel':'');
+    c.dataset.key=h.key;
+    c.innerHTML=`${h.emoji}<span>${h.label}</span>`;
+    c.onclick=()=>{ document.querySelectorAll('.hchip').forEach(x=>x.classList.remove('sel')); c.classList.add('sel'); };
+    row.appendChild(c);
+  });
+}
+
+function openTP(id) {
+  selId=id; render();
+  const t=D.trees.find(x=>x.id===id); if(!t)return;
+  document.getElementById('tp-tit').textContent=t.name||(t._n!=null?`Arbre n°${t._n}`:'Arbre');
+  document.getElementById('tp-badge').innerHTML=t.row!=null
+    ?`<span class="pbadge pbg">🟩 Grille · L${t.row+1}·C${t.col+1}</span>`
+    :`<span class="pbadge pbf">🟧 Libre · n°${t._n||'?'}</span>`;
+  document.getElementById('f-name').value=t.name||'';
+  document.getElementById('f-esp').value=t.espece||'';
+  document.getElementById('f-h').value=t.hauteur||'';
+  document.getElementById('f-d').value=t.diametre||'';
+  document.getElementById('f-dt').value=t.datePlantation||'';
+  document.getElementById('f-fr').value=t.forme||'';
+  document.getElementById('f-notes').value=t.notes||'';
+  buildHrow(t.sante);
+  const hb=document.getElementById('tp-hist');
+  hb.innerHTML=t.history&&t.history.length
+    ?`<div class="hlbl">Historique (${t.history.length})</div>`+t.history.slice().reverse().map(h=>`<div class="hi"><div class="hid">${h.date}</div><div class="hib">${h.sum}</div></div>`).join('')
+    :'';
+  document.getElementById('ov-tree').classList.add('open');
+}
+
+function closeTP() {
+  document.getElementById('ov-tree').classList.remove('open');
+  selId=null; render();
+}
+
+function saveTree() {
+  if(!selId)return;
+  const t=D.trees.find(x=>x.id===selId); if(!t)return;
+  const prev=treeSum(t);
+  t.name=document.getElementById('f-name').value.trim();
+  t.espece=document.getElementById('f-esp').value.trim();
+  t.hauteur=document.getElementById('f-h').value;
+  t.diametre=document.getElementById('f-d').value;
+  t.datePlantation=document.getElementById('f-dt').value;
+  t.forme=document.getElementById('f-fr').value;
+  t.notes=document.getElementById('f-notes').value.trim();
+  t.sante=document.querySelector('.hchip.sel')?.dataset.key||'';
+  const cur=treeSum(t);
+  if(cur!==prev){if(!t.history)t.history=[];t.history.push({date:fmt(today()),sum:cur});}
+  save(); renumber(); render(); updHdr(); closeTP();
+  toast('✅ Enregistré');
+}
+
+function treeSum(t) {
+  const p=[];
+  if(t.espece)p.push(t.espece);
+  if(t.hauteur)p.push(`H:${t.hauteur}cm`);
+  if(t.sante){const h=D.health.find(x=>x.key===t.sante);if(h)p.push(h.label);}
+  if(t.notes)p.push(t.notes.slice(0,50));
+  return p.join(' · ')||'—';
+}
+
+/* Suppression depuis le panel — séquentiel pour éviter bug iOS */
+function delFromPanel() {
+  if(!selId)return;
+  const id=selId;
+  // 1. Ferme le panel
+  closeTP();
+  // 2. Après animation, supprime
+  setTimeout(()=>{
+    D.trees=D.trees.filter(t=>t.id!==id);
+    renumber(); save(); render(); updHdr();
+    toast('🗑 Arbre supprimé');
+  }, 120);
+}
+
+/* Fermeture overlay par tap fond ou swipe bas */
+document.querySelectorAll('.ov').forEach(ov=>{
+  ov.addEventListener('click', e=>{ if(e.target===ov){ ov.classList.remove('open'); if(ov.id==='ov-tree'){selId=null;render();} } });
+});
+document.querySelectorAll('.sh').forEach(sh=>{
+  let sy0=0;
+  sh.addEventListener('touchstart',e=>{sy0=e.touches[0].clientY;});
+  sh.addEventListener('touchend',e=>{
+    if(e.changedTouches[0].clientY-sy0>85){
+      const ov=sh.closest('.ov'); if(!ov)return;
+      ov.classList.remove('open');
+      if(ov.id==='ov-tree'){selId=null;render();}
+    }
+  });
+});
+
+/* ═══ GRILLE ═══ */
+let gridPrev=null, pendGrid=null;
+
+function calcGrid() {
+  const fw=parseFloat(document.getElementById('g-fw').value)||50;
+  const fh=parseFloat(document.getElementById('g-fh').value)||40;
+  const sx=parseFloat(document.getElementById('g-sx').value)||5;
+  const sy=parseFloat(document.getElementById('g-sy').value)||5;
+  const cols=Math.max(1,Math.floor(fw/sx)+1);
+  const rows=Math.max(1,Math.floor(fh/sy)+1);
+  const pos=[];
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)pos.push({xm:c*sx,ym:r*sy,row:r,col:c});
+  return {pos,rows,cols,fw,fh,sx,sy};
+}
+
+/* Calcule l'offset X pour ne pas superposer avec les arbres existants.
+   On trouve la colonne la plus à droite existante, on décale de sx mètres. */
+function getGridOffsetX(sx) {
+  if (!D.trees.length) return 0;
+  const maxX = Math.max(...D.trees.map(t=>t.xm||0));
+  // Arrondir à un multiple de sx, puis ajouter sx
+  return Math.ceil(maxX / sx) * sx + sx;
+}
+
+function liveCalc(){const g=calcGrid();document.getElementById('g-cnt').textContent=`${g.pos.length} arbres`;document.getElementById('g-det').innerHTML=`${g.rows} lignes × ${g.cols} colonnes<br>${g.fw}m × ${g.fh}m · esp. ${g.sx}m/${g.sy}m`;}
+function openGrid(){document.getElementById('ov-grid').classList.add('open');liveCalc();}
+function closeGrid(){document.getElementById('ov-grid').classList.remove('open');gridPrev=null;render();}
+
+function previewGrid(){
+  const g=calcGrid();
+  const offsetX = getGridOffsetX(g.sx);
+  // Agrandir le champ si besoin
+  const maxX = offsetX + (g.cols-1)*g.sx;
+  const maxY = (g.rows-1)*g.sy;
+  FW = Math.max(FW, maxX + g.sx);
+  FH = Math.max(FH, maxY + g.sy);
+  calcPxPerM();
+  // Preview : positions avec offset
+  gridPrev = { pos: g.pos.map(p=>({...p, xm:p.xm+offsetX})), sx:g.sx };
+  render();
+  toast(`Aperçu : ${g.pos.length} positions (offset +${offsetX}m)`);
+}
+
+function askPlace(){
+  const g=calcGrid();
+  const offsetX = getGridOffsetX(g.sx);
+  const posWithOffset = g.pos.map(p=>({...p, xm:p.xm+offsetX}));
+  pendGrid={...g, pos:posWithOffset, offsetX};
+  const n=g.pos.length, e=D.trees.length;
+  document.getElementById('c-tit').textContent=`Placer ${n} arbres`;
+  document.getElementById('c-txt').innerHTML=e>0
+    ?`Vous avez déjà <strong>${e} arbre${e>1?'s':''}</strong>.<br>➕ Ajouter les placera à <strong>${offsetX}m</strong> à droite.`
+    :`${n} arbres · ${g.rows} lignes × ${g.cols} colonnes`;
+  document.getElementById('btn-repl').style.display=e>0?'':'none';
+  document.getElementById('ov-conf').classList.add('open');
+}
+
+function doPlace(replace){
+  if(!pendGrid)return;
+  const g=pendGrid;
+
+  if(replace){
+    D.trees=[];
+    FW = g.fw;
+    FH = g.fh;
+    const pos = g.pos.map(p=>({...p, xm: p.xm - (g.offsetX||0), ym: p.ym}));
+    pos.forEach(p=>D.trees.push({id:uid(),xm:p.xm,ym:p.ym,name:'',espece:'',hauteur:'',diametre:'',datePlantation:'',forme:'',sante:'',notes:'',row:p.row,col:p.col,history:[]}));
+    fitToScreen(); // APRÈS ajout pour que detectSpacing voie les arbres
+  } else {
+    const pos = g.pos;
+    const maxX = Math.max(...pos.map(p=>p.xm));
+    const maxY = Math.max(...pos.map(p=>p.ym));
+    FW = Math.max(FW, maxX + g.sx);
+    FH = Math.max(FH, maxY + g.sy);
+    pos.forEach(p=>D.trees.push({id:uid(),xm:p.xm,ym:p.ym,name:'',espece:'',hauteur:'',diametre:'',datePlantation:'',forme:'',sante:'',notes:'',row:p.row,col:p.col,history:[]}));
+    fitToScreen(); // recalcule avec les nouveaux arbres
+  }
+
+  renumber(); gridPrev=null; panX=0; panY=0; save(); render(); updHdr(); closeConf(); closeGrid();
+  toast(`✅ ${D.trees.length} arbres placés`);
+}
+function closeConf(){document.getElementById('ov-conf').classList.remove('open');}
+
+/* ═══ LISTE ═══ */
+function treeSVGtiny(r,crown,trunk){const s=r*2.6;const tw=Math.max(2,r*.22),th=r*.55,crx=r,cry=r*.82,cY=r*.82*.6;return`<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}" xmlns="http://www.w3.org/2000/svg" style="display:block;flex-shrink:0"><rect x="${s/2-tw/2}" y="${s/2}" width="${tw}" height="${th}" rx="${tw/3}" fill="${trunk}" opacity=".9"/><ellipse cx="${s/2}" cy="${s/2-cY}" rx="${crx}" ry="${cry}" fill="${crown}" opacity=".93"/><ellipse cx="${s/2-crx*.25}" cy="${s/2-cY-cry*.25}" rx="${crx*.3}" ry="${cry*.22}" fill="rgba(255,255,255,.22)"/></svg>`;}
+function renderList(){
+  const el=document.getElementById('lscroll');
+  if(!D.trees.length){el.innerHTML=`<div class="empty"><div class="ei">🌱</div><p>Aucun arbre.<br>Allez sur <strong>Champ</strong> pour commencer.</p></div>`;return;}
+  const ht=D.trees.filter(t=>t.hauteur);
+  const avg=ht.length?ht.reduce((s,t)=>s+parseFloat(t.hauteur),0)/ht.length:0;
+  const rens=D.trees.filter(t=>t.espece||t.notes).length;
+  el.innerHTML=`<div class="srow"><div class="sc"><div class="sn">${D.trees.length}</div><div class="sl">Arbres</div></div><div class="sc"><div class="sn">${rens}</div><div class="sl">Renseignés</div></div><div class="sc"><div class="sn">${avg?Math.round(avg)+'cm':'—'}</div><div class="sl">Haut. moy.</div></div></div>`
+  +D.trees.map(t=>{const h=D.health.find(x=>x.key===t.sante)||{crown:'#6a8e1a',trunk:'#3a4e08',emoji:'',label:''};const r=Math.max(10,Math.min(20,10+parseFloat(t.hauteur||0)/30));return`<div class="li" onclick="gotoTree('${t.id}')">${treeSVGtiny(r,h.crown,h.trunk)}<div class="linfo"><div class="lname">${t.name||`Arbre n°${t._n||'?'}`}</div><div class="lmeta">${t.espece||'Espèce inconnue'}${t.hauteur?' · '+t.hauteur+'cm':''}${h.emoji?' · '+h.emoji+' '+h.label:''}</div>${t.datePlantation?`<div class="lpos">Planté ${fmt(t.datePlantation)}</div>`:''}</div></div>`;}).join('');
+}
+function gotoTree(id){const b=document.querySelector('.tab[data-p="page-champ"]');goTab(b,'page-champ');setTimeout(()=>openTP(id),80);}
+
+/* ═══ JOURNAL ═══ */
+let editJid=null;
+function openJF(id){editJid=id||null;const e=id?D.journal.find(x=>x.id===id):null;document.getElementById('jf-tit').textContent=e?'✏️ Modifier':'📓 Nouvelle entrée';document.getElementById('jf-cat').value=e?e.cat:'';document.getElementById('jf-titl').value=e?e.tit:'';document.getElementById('jf-body').value=e?e.body:'';document.getElementById('jf-date').value=e?e.date:today();document.getElementById('jf-trees').value=e?e.trees:'';document.getElementById('ov-jf').classList.add('open');}
+function closeJF(){document.getElementById('ov-jf').classList.remove('open');}
+function saveJE(){const cat=document.getElementById('jf-cat').value.trim(),tit=document.getElementById('jf-titl').value.trim(),body=document.getElementById('jf-body').value.trim(),date=document.getElementById('jf-date').value,trees=document.getElementById('jf-trees').value.trim();if(!tit&&!body){toast('⚠️ Titre ou contenu requis');return;}if(editJid){const e=D.journal.find(x=>x.id===editJid);if(e)Object.assign(e,{cat,tit,body,date,trees});}else D.journal.push({id:uid(),cat,tit,body,date,trees});save();closeJF();renderJ();toast('✅ Entrée enregistrée');}
+function delJE(id){D.journal=D.journal.filter(e=>e.id!==id);save();renderJ();toast('🗑 Entrée supprimée');}
+function renderJ(){
+  const q=(document.getElementById('jsearch')?.value||'').toLowerCase();
+  let en=D.journal.filter(e=>!q||(e.tit+e.body+e.cat).toLowerCase().includes(q));
+  en.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const cats=[...new Set(D.journal.map(e=>e.cat).filter(Boolean))];
+  document.getElementById('jtoc').innerHTML=cats.map(c=>`<div class="tchip" onclick="filterJ('${c}')">${c}</div>`).join('');
+  const el=document.getElementById('jscroll');
+  if(!en.length){el.innerHTML=`<div class="empty"><div class="ei">📓</div><p>Aucune entrée.<br>Appuyez <strong>＋ Entrée</strong>.</p></div>`;return;}
+  el.innerHTML=en.map(e=>`<div class="je"><div class="jeh">${e.cat?`<span class="jecat">${e.cat}</span>`:''}<div class="jetit">${e.tit||'(sans titre)'}</div><div class="jedate">${fmt(e.date)}${e.trees?' · 🌳 '+e.trees:''}</div></div><div class="jebody">${e.body||''}</div><div class="jeact"><button class="ja" onclick="openJF('${e.id}')">✏️ Modifier</button><button class="ja del" onclick="delJE('${e.id}')">🗑 Supprimer</button></div></div>`).join('');
+}
+function filterJ(c){document.getElementById('jsearch').value=c;renderJ();}
+
+/* ═══ MÉTÉO ═══ */
+let selWeather='', selPtype='day';
+
+function selPT(btn){
+  selPtype=btn.dataset.pt;
+  document.querySelectorAll('.ptb').forEach(b=>b.classList.remove('sel')); btn.classList.add('sel');
+  ['pf-day','pf-week','pf-range'].forEach(id=>{ document.getElementById(id).style.display='none'; });
+  document.getElementById('pf-'+selPtype).style.display='';
+}
+function selW2(btn){document.querySelectorAll('.wpb').forEach(b=>b.classList.remove('sel'));btn.classList.add('sel');selWeather=btn.dataset.w;}
+
+function openMF(){
+  selWeather=''; selPtype='day';
+  document.querySelectorAll('.wpb').forEach(b=>b.classList.remove('sel'));
+  document.querySelectorAll('.ptb').forEach(b=>b.classList.remove('sel'));
+  document.querySelector('.ptb[data-pt="day"]').classList.add('sel');
+  ['pf-day','pf-week','pf-range'].forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('pf-day').style.display='';
+  ['mf-d1','mf-wk','mf-fr','mf-to','mf-tmin','mf-tmax','mf-rain','mf-hum','mf-wind','mf-sun','mf-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('mf-d1').value=today();
+  document.getElementById('ov-mf').classList.add('open');
+}
+function closeMF(){document.getElementById('ov-mf').classList.remove('open');}
+
+function getPeriod(){
+  if(selPtype==='day'){
+    const v=document.getElementById('mf-d1').value;
+    if(!v)return null;
+    return{type:'day',label:fmt(v),sortKey:v};
+  }
+  if(selPtype==='week'){
+    // mf-wk est un <input type="date"> → valeur YYYY-MM-DD (lundi choisi)
+    const v=document.getElementById('mf-wk').value;
+    if(!v)return null;
+    const d=new Date(v+'T12:00:00');
+    const end=new Date(d); end.setDate(end.getDate()+6);
+    const fl=x=>x.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
+    // sortKey = clé ISO semaine "YYYY-Www" calculée depuis la date
+    const wk=isoWeek(v);
+    return{type:'week',label:`Sem. ${fl(d)} – ${fl(end)}`,sortKey:wk};
+  }
+  if(selPtype==='range'){
+    const fr=document.getElementById('mf-fr').value,to=document.getElementById('mf-to').value;
+    if(!fr)return null;
+    return{type:'range',label:`${fmt(fr)}${to?' → '+fmt(to):''}`,sortKey:fr};
+  }
+}
+function saveME(){
+  const per=getPeriod();if(!per){toast('⚠️ Sélectionnez une période');return;}
+  const e={id:uid(),period:per,weather:selWeather,tmin:document.getElementById('mf-tmin').value,tmax:document.getElementById('mf-tmax').value,rain:document.getElementById('mf-rain').value,hum:document.getElementById('mf-hum').value,wind:document.getElementById('mf-wind').value,sun:document.getElementById('mf-sun').value,notes:document.getElementById('mf-notes').value.trim()};
+  D.meteo.push(e);D.meteo.sort((a,b)=>b.period.sortKey.localeCompare(a.period.sortKey));
+  save();closeMF();renderM();toast('✅ Relevé enregistré');
+}
+function delME(id){D.meteo=D.meteo.filter(e=>e.id!==id);save();renderM();toast('🗑 Relevé supprimé');}
+
+/* Retourne le numéro de semaine ISO (lundi=début) d'une date string "YYYY-MM-DD" */
+function isoWeek(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr+'T12:00:00');
+  const tmp = new Date(d); tmp.setHours(0,0,0,0);
+  tmp.setDate(tmp.getDate()+3-(tmp.getDay()||7)-1);
+  const week1 = new Date(tmp.getFullYear(),0,4);
+  const wn = 1+Math.round(((tmp-week1)/86400000-3+(week1.getDay()||7))/7);
+  return `${tmp.getFullYear()}-W${String(wn).padStart(2,'0')}`;
+}
+/* Retourne le lundi d'une semaine ISO key "YYYY-Www" */
+function weekMonday(key) {
+  const [y,w]=key.split('-W');
+  const d=new Date(+y,0,1+((+w-1)*7));
+  d.setDate(d.getDate()-(d.getDay()||7)+1);
+  return d;
+}
+
+/* Agrège les précipitations par semaine ISO */
+function weeklyRain() {
+  const map = {};
+  D.meteo.forEach(e => {
+    const r = parseFloat(e.rain)||0;
+    if (!r) return;
+    let wk;
+    if (e.period?.type === 'week') {
+      // Entrée semaine → utilise son sortKey directement
+      wk = e.period.sortKey;
+    } else if (e.period?.type === 'day') {
+      wk = isoWeek(e.period.sortKey);
+    } else if (e.period?.type === 'range') {
+      wk = isoWeek(e.period.sortKey);
+    } else if (e.period?.type === 'month') {
+      wk = e.period.sortKey.slice(0,7)+'-W01'; // approximation
+    } else { return; }
+    if (!wk) return;
+    map[wk] = (map[wk]||0) + r;
+  });
+  // Trier par semaine décroissante, garder 12 semaines
+  return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0])).slice(-12);
+}
+
+function renderM(){
+  const el=document.getElementById('mscroll');
+  if(!D.meteo.length){el.innerHTML=`<div class="empty"><div class="ei">🌤️</div><p>Aucun relevé.<br>Appuyez <strong>＋ Relevé</strong>.</p></div>`;return;}
+
+  // Graphe précipitations par semaine
+  const wkRain = weeklyRain();
+  const maxR = Math.max(...wkRain.map(w=>w[1]),1);
+  const total = D.meteo.reduce((s,e)=>s+(parseFloat(e.rain)||0),0);
+
+  let barsHTML = '';
+  if (wkRain.length) {
+    barsHTML = wkRain.map(([wk, mm]) => {
+      const h = Math.max(2, Math.round((mm/maxR)*42));
+      const mon = weekMonday(wk);
+      const lbl = mon.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+      return `<div class="mbw"><div class="mb" style="height:${h}px" title="${mm.toFixed(1)}mm"></div><div class="mbl">${lbl}</div></div>`;
+    }).join('');
+  } else {
+    barsHTML = '<span style="font-size:12px;color:var(--barkl)">Ajoutez des précipitations pour voir le graphe</span>';
+  }
+
+  let html=`<div class="msum"><div class="mstit">💧 Précipitations par semaine</div><div class="mbars">${barsHTML}</div><div style="margin-top:8px;font-size:11px;color:var(--bark)">Total cumulé : <strong>${total.toFixed(1)} mm</strong></div></div>`;
+  html+=D.meteo.map(e=>{
+    const tr=((e.tmin!==''&&e.tmin!=null)||(e.tmax!==''&&e.tmax!=null))?`${e.tmin??'—'}°/${e.tmax??'—'}°`:'';
+    const fs=[];
+    if(tr)fs.push(`<div><div class="mfl">Température</div><div class="mfv">${tr}</div><div class="mfu">min/max</div></div>`);
+    if(e.rain!='')fs.push(`<div><div class="mfl">Pluie</div><div class="mfv">${e.rain}</div><div class="mfu">mm</div></div>`);
+    if(e.hum!='')fs.push(`<div><div class="mfl">Humidité</div><div class="mfv">${e.hum}</div><div class="mfu">%</div></div>`);
+    if(e.wind!='')fs.push(`<div><div class="mfl">Vent</div><div class="mfv">${e.wind}</div><div class="mfu">km/h</div></div>`);
+    if(e.sun!='')fs.push(`<div><div class="mfl">Soleil</div><div class="mfv">${e.sun}</div><div class="mfu">h</div></div>`);
+    return`<div class="mc"><div class="mch"><div class="mcper">📅 ${e.period?.label||'—'}</div><div class="mcico">${e.weather||''}</div><div class="mcsum">${tr?'🌡 '+tr:''}${e.rain?' · 💧'+e.rain+'mm':''}</div><button class="mcdel" onclick="delME('${e.id}')">🗑 Supprimer</button></div>${fs.length?`<div class="mcb">${fs.join('')}</div>`:''} ${e.notes?`<div class="mcnotes">${e.notes}</div>`:''}</div>`;
+  }).join('');
+  el.innerHTML=html;
+}
+
+/* ═══ RÉGLAGES ═══ */
+function openSettings(){
+  const el=document.getElementById('scfg');el.innerHTML='';
+  D.health.forEach((h,i)=>{const r=document.createElement('div');r.className='scfgr';r.innerHTML=`<div class="ssw" style="background:linear-gradient(135deg,${h.crown},${h.trunk})"></div><span style="font-size:18px">${h.emoji}</span><input class="sinp" data-i="${i}" value="${h.label}" placeholder="Nom">`;el.appendChild(r);});
+  document.getElementById('ov-set').classList.add('open');
+}
+function closeSettings(){document.getElementById('ov-set').classList.remove('open');}
+function saveSettings(){document.querySelectorAll('.sinp').forEach(inp=>{const i=+inp.dataset.i;if(D.health[i])D.health[i].label=inp.value.trim()||D.health[i].label;});save();render();closeSettings();toast('✅ Sauvegardé');}
+function exportCSV(){const rows=[['Num','Nom','Type','Ligne','Colonne','Espèce','Hauteur(cm)','Diamètre(cm)','DatePlantation','Forme','État','Notes'],...D.trees.map(t=>{const h=D.health.find(x=>x.key===t.sante);return[t._n||'',t.name,t.row!=null?'Grille':'Libre',t.row!=null?t.row+1:'',t.col!=null?t.col+1:'',t.espece,t.hauteur,t.diametre,t.datePlantation,t.forme,h?h.label:'',(t.notes||'').replace(/\n/g,' ')];})];const csv=rows.map(r=>r.map(c=>`"${c??''}"`).join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));a.download=`arbres-${today()}.csv`;a.click();toast('📤 CSV exporté');}
+
+/* Export JSON — sauvegarde toutes les données */
+function exportJSON(){
+  const data = JSON.stringify({...D, fw:FW, fh:FH, exportDate:today(), version:'v6'}, null, 2);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+  a.download=`mon-champ-backup-${today()}.json`;
+  a.click();
+  toast('📦 Sauvegarde JSON exportée');
+}
+
+/* Import JSON — restaure toutes les données depuis un fichier */
+function importJSON(){
+  const input=document.createElement('input');
+  input.type='file'; input.accept='.json';
+  input.onchange=e=>{
+    const file=e.target.files[0]; if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try {
+        const p=JSON.parse(ev.target.result);
+        if(!p.trees&&!p.journal&&!p.meteo){toast('⚠️ Fichier JSON invalide');return;}
+        const n=(p.trees||[]).length;
+        if(!confirm(`Importer ${n} arbre(s) + journal + météo ?\nCela remplacera toutes les données actuelles.`))return;
+        D.trees   = p.trees   || [];
+        D.journal = p.journal || [];
+        D.meteo   = p.meteo   || [];
+        if(p.health) D.health = p.health;
+        if(p.fw) FW=p.fw;
+        if(p.fh) FH=p.fh;
+        save(); calcPxPerM(); renumber(); render(); updHdr(); closeSettings();
+        toast(`✅ ${n} arbre(s) importé(s)`);
+      } catch(err){ toast('⚠️ Erreur de lecture JSON'); }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+function clearAll(){if(!confirm('Supprimer TOUTES les données ?'))return;D.trees=[];D.journal=[];D.meteo=[];save();renumber();render();updHdr();closeSettings();toast('Données effacées');}
+
+/* ═══ INIT ═══ */
+function init(){
+  load();
+  if(D.trees.length){
+    FW=Math.max(FW,...D.trees.map(t=>t.xm||0).map(v=>Math.ceil(v+5)));
+    FH=Math.max(FH,...D.trees.map(t=>t.ym||0).map(v=>Math.ceil(v+5)));
+  }
+  fitToScreen(); // calcule pxPerM depuis l'espacement réel + zoom=1
+  renumber();
+  initInteract();
+  render();
+  updHdr();
+  liveCalc();
+  window.addEventListener('resize', onResize);
+  window.selW = selW2;
+
+  // PWA Manifest (Android install)
+  try {
+    const ic=document.createElement('canvas'); ic.width=512; ic.height=512;
+    const ix=ic.getContext('2d');
+    const rr=96;
+    ix.beginPath(); ix.moveTo(rr,0); ix.lineTo(512-rr,0); ix.arcTo(512,0,512,rr,rr);
+    ix.lineTo(512,512-rr); ix.arcTo(512,512,512-rr,512,rr);
+    ix.lineTo(rr,512); ix.arcTo(0,512,0,512-rr,rr);
+    ix.lineTo(0,rr); ix.arcTo(0,0,rr,0,rr); ix.closePath();
+    const gg=ix.createLinearGradient(0,0,512,512);
+    gg.addColorStop(0,"#3d6b47"); gg.addColorStop(1,"#1a0e05");
+    ix.fillStyle=gg; ix.fill();
+    ix.fillStyle="#7a4a1a"; ix.beginPath(); ix.roundRect(230,310,52,128,8); ix.fill();
+    ix.fillStyle="#4dc460"; ix.beginPath(); ix.ellipse(256,230,148,138,0,0,Math.PI*2); ix.fill();
+    ix.fillStyle="rgba(255,255,255,0.18)"; ix.beginPath(); ix.ellipse(208,178,58,44,-0.4,0,Math.PI*2); ix.fill();
+    const iconUrl=ic.toDataURL("image/png");
+    const mf={name:"Paulownia App",short_name:"Paulownia App",start_url:".",display:"standalone",background_color:"#2c1f0e",theme_color:"#2c1f0e",orientation:"portrait",icons:[{src:iconUrl,sizes:"512x512",type:"image/png",purpose:"any maskable"}]};
+    const mb=new Blob([JSON.stringify(mf)],{type:"application/manifest+json"});
+    const ml=document.createElement("link"); ml.rel="manifest"; ml.href=URL.createObjectURL(mb);
+    document.head.appendChild(ml);
+  } catch(e){}
+
+  // Service Worker (mode offline)
+  if ("serviceWorker" in navigator) {
+    const swCode=`const CACHE="mon-champ-v6";
+self.addEventListener("install",()=>self.skipWaiting());
+self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k))))));
+self.addEventListener("fetch",e=>{
+  if(e.request.url.includes("fonts.googleapis")||e.request.url.includes("fonts.gstatic")){
+    e.respondWith(caches.open(CACHE).then(c=>c.match(e.request).then(r=>r||fetch(e.request).then(res=>{c.put(e.request,res.clone());return res;}))));
+    return;
+  }
+  e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));
+});`;
+    try {
+      const sb=new Blob([swCode],{type:"application/javascript"});
+      navigator.serviceWorker.register(URL.createObjectURL(sb)).catch(()=>{});
+    } catch(e){}
+  }
+}
+init();
+</script>
+</body>
+</html>
