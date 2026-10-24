@@ -64,27 +64,33 @@ export function renumber(trees) {
 /* ══ Grille : chaque case Lx Cy correspond à une position fixe ══════════════
    x = x0 + colonne × espacementX     y = y0 + ligne × espacementY        */
 
-/* Valeur la plus fréquente (arrondie au dixième) ; à égalité, la plus petite */
-function mode(vals) {
-  const cnt = {}
-  vals.forEach(v => { const k = Math.round(v * 10) / 10; cnt[k] = (cnt[k] || 0) + 1 })
-  return Object.entries(cnt).map(([k, n]) => [+k, n]).sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null
-}
+const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)] }
 
-function axisLattice(values, fallback) {
-  const u = [...new Set(values.map(v => Math.round(v * 10) / 10))].sort((a, b) => a - b)
-  const gaps = []
-  for (let i = 1; i < u.length; i++) if (u[i] - u[i - 1] > 0.5) gaps.push(u[i] - u[i - 1])
-  const step = mode(gaps) || fallback
-  let origin = mode(values.map(v => ((v % step) + step) % step)) ?? 0
-  if (step - origin < 0.15) origin = 0
+/* Espacement + origine d'un axe, déduits des arbres déjà numérotés.
+   On compare les arbres d'une même ligne (ou colonne) : la médiane ignore
+   les quelques arbres posés à la main ou mal numérotés. */
+function axisLattice(grid, pos, idx, same, fallback) {
+  const byLine = {}
+  grid.forEach(t => { (byLine[t[same]] = byLine[t[same]] || []).push(t) })
+  const steps = []
+  Object.values(byLine).forEach(line => {
+    for (let i = 0; i < line.length; i++) for (let j = i + 1; j < line.length; j++) {
+      const a = line[i], b = line[j]
+      if (a[idx] === b[idx]) continue
+      const s = (b[pos] - a[pos]) / (b[idx] - a[idx])
+      if (s > 0.3) steps.push(s)
+    }
+  })
+  const step = steps.length ? Math.round(median(steps) * 100) / 100 : fallback
+  const origin = grid.length ? Math.round(median(grid.map(t => t[pos] - t[idx] * step)) * 100) / 100 : 0
   return { step, origin }
 }
 
-/* Déduit la grille (espacement + origine) à partir des positions des arbres */
+/* Déduit la grille (espacement + origine) à partir des arbres déjà numérotés */
 export function getLattice(trees, fallback = 5) {
-  const x = axisLattice(trees.map(t => t.xm), fallback)
-  const y = axisLattice(trees.map(t => t.ym), fallback)
+  const grid = trees.filter(t => t.row != null && t.col != null)
+  const x = axisLattice(grid, 'xm', 'col', 'row', fallback)
+  const y = axisLattice(grid, 'ym', 'row', 'col', fallback)
   return { sx: x.step, x0: x.origin, sy: y.step, y0: y.origin }
 }
 
@@ -104,30 +110,34 @@ export function parseCell(str) {
 
 export const treeName = t => t.name || t._label || 'Arbre'
 
-/* Recalcule la case de chaque arbre à partir de sa position (sans rien modifier) */
+/* Recalcule la case de chaque arbre (sans rien modifier).
+   - position nette sur une case  → l'arbre prend cette case
+   - position ambiguë (entre deux) → il garde son numéro et se recale dessus
+   - deux arbres sur une même case → celui qui avait déjà ce numéro est prioritaire */
 export function planRenumber(trees, tol = 0.3) {
   const lat = getLattice(trees)
-  const best = new Map()   // case → { t, err, row, col }
-  const skipped = []
+  const skipped = [], wants = []
   trees.forEach(t => {
     const c = (t.xm - lat.x0) / lat.sx, r = (t.ym - lat.y0) / lat.sy
     const col = Math.round(c), row = Math.round(r)
     const err = Math.max(Math.abs(c - col), Math.abs(r - row))
-    if (err > tol)          return skipped.push({ tree: t, reason: 'entre deux cases' })
-    if (row < 0 || col < 0) return skipped.push({ tree: t, reason: 'hors de la grille' })
-    const k = `${row}:${col}`, cur = best.get(k)
-    const cand = { t, err, row, col }
-    if (!cur) best.set(k, cand)
-    else if (err < cur.err) { skipped.push({ tree: cur.t, reason: `même case que ${treeName(t)} (${cellLabel(row, col)})` }); best.set(k, cand) }
-    else skipped.push({ tree: t, reason: `même case que ${treeName(cur.t)} (${cellLabel(row, col)})` })
+    const hasLabel = t.row != null && t.col != null
+    if (err <= tol && row >= 0 && col >= 0) wants.push({ t, row, col, err, keeps: hasLabel && t.row === row && t.col === col })
+    else if (hasLabel) wants.push({ t, row: t.row, col: t.col, err: 1, keeps: true })
+    else skipped.push({ tree: t, reason: row < 0 || col < 0 ? 'hors de la grille' : 'entre deux cases' })
   })
-  const assign = [], changes = []
-  best.forEach(({ t, row, col }) => {
-    const pos = cellPos(lat, row, col)
-    const relabel = t.row !== row || t.col !== col
-    if (relabel || Math.abs(t.xm - pos.xm) > 0.001 || Math.abs(t.ym - pos.ym) > 0.001) {
-      assign.push({ id: t.id, row, col, ...pos })
-      if (relabel) changes.push({ tree: t, from: t._label || '?', to: cellLabel(row, col) })
+  // prioritaires d'abord : ceux qui gardent leur numéro, puis les mieux placés
+  wants.sort((a, b) => (b.keeps - a.keeps) || (a.err - b.err))
+  const taken = new Map(), assign = [], changes = []
+  wants.forEach(w => {
+    const k = `${w.row}:${w.col}`
+    if (taken.has(k)) return skipped.push({ tree: w.t, reason: `même case que ${treeName(taken.get(k))} (${cellLabel(w.row, w.col)})` })
+    taken.set(k, w.t)
+    const pos = cellPos(lat, w.row, w.col)
+    const relabel = w.t.row !== w.row || w.t.col !== w.col
+    if (relabel || Math.abs(w.t.xm - pos.xm) > 0.001 || Math.abs(w.t.ym - pos.ym) > 0.001) {
+      assign.push({ id: w.t.id, row: w.row, col: w.col, ...pos })
+      if (relabel) changes.push({ tree: w.t, from: w.t._label || '?', to: cellLabel(w.row, w.col) })
     }
   })
   return { lat, assign, changes, skipped }
