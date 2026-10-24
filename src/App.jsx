@@ -39,6 +39,7 @@ export default function App() {
   const [confOpen, setConfOpen] = useState(false)
   const [jOpen,    setJOpen]    = useState(false)
   const [editJid,  setEditJid]  = useState(null)
+  const [jCat,     setJCat]     = useState('')
   const [mOpen,    setMOpen]    = useState(false)
   const [setOpen,  setSetOpen]  = useState(false)
 
@@ -175,15 +176,18 @@ export default function App() {
   }
 
   function handleSnapGrid() {
-    const plan = planGridSnap(data.trees)
-    if (plan.error === 'nogrid')    { showToast('⚠️ Pas assez d\'arbres en grille pour la retrouver'); return }
-    if (plan.error === 'irregular') { showToast('⚠️ Grille irrégulière : rangement automatique impossible'); return }
-    if (!plan.assign.length)        { showToast(`Aucun arbre à ranger (${plan.skipped.length} restent libres)`); return }
-    if (!confirm(`${plan.assign.length} arbre(s) libre(s) vont recevoir un label L…C…\n` +
-                 `${plan.skipped.length} resteront libres (trop loin d'une case ou case déjà occupée).\n\nContinuer ?`)) return
-    data.applyGridSnap(plan.assign)
+    const { assign, skipped } = planGridSnap(data.trees)
+    if (!assign.length && !skipped.length) { showToast('Aucun arbre libre à ranger'); return }
+    const list = skipped.slice(0, 15).map(({ tree: t, reason }) =>
+      `• ${t.name || t._label || 'Arbre'} (x ${Math.round(t.xm)} m, y ${Math.round(t.ym)} m) : ${reason}`).join('\n')
+    const more = skipped.length > 15 ? `\n… et ${skipped.length - 15} autre(s)` : ''
+    if (!assign.length) { alert(`Aucun arbre n'a pu être rangé :\n\n${list}${more}`); return }
+    if (!confirm(`${assign.length} arbre(s) vont être rangés dans la grille.` +
+      (skipped.length ? `\n\n${skipped.length} ne peuvent pas l'être :\n${list}${more}` : '') +
+      '\n\nContinuer ?')) return
+    data.applyGridSnap(assign)
     setSetOpen(false)
-    showToast(`✅ ${plan.assign.length} arbre(s) rangé(s) dans la grille`)
+    showToast(`✅ ${assign.length} rangé(s)` + (skipped.length ? ` · ${skipped.length} restent libres` : ''))
   }
 
   function clearAll() {
@@ -226,7 +230,7 @@ export default function App() {
         />
         <PageJournal
           journal={data.journal} active={tab === 'journal'}
-          onAdd={() => { setEditJid(null); setJOpen(true) }}
+          onAdd={cat => { setEditJid(null); setJCat(cat || ''); setJOpen(true) }}          
           onEdit={id => { setEditJid(id); setJOpen(true) }}
           onDelete={handleDeleteJournal}
         />
@@ -270,6 +274,8 @@ export default function App() {
       <JournalSheet
         open={jOpen}
         editEntry={editJid ? data.journal.find(e => e.id === editJid) : null}
+        defaultCat={jCat}
+        cats={[...new Set(data.journal.map(e => (e.cat || '').trim()).filter(Boolean))]}
         onClose={() => { setJOpen(false); setEditJid(null) }}
         onSave={handleSaveJournal}
       />

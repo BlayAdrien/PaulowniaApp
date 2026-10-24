@@ -61,35 +61,56 @@ export function renumber(trees) {
   return trees
 }
 
-/* Déduit la grille (espacement + origine) à partir des arbres déjà en grille */
-function fitAxis(pairs) {
-  const n = pairs.length
-  if (n < 2) return null
-  const mi = pairs.reduce((s, [i]) => s + i, 0) / n
-  const mp = pairs.reduce((s, [, p]) => s + p, 0) / n
-  let cov = 0, v = 0
-  pairs.forEach(([i, p]) => { cov += (i - mi) * (p - mp); v += (i - mi) ** 2 })
-  if (!v) return null
-  const step = cov / v
-  const origin = mp - step * mi
-  const maxErr = Math.max(...pairs.map(([i, p]) => Math.abs(origin + step * i - p)))
-  return { step, origin, maxErr }
+const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)] }
+
+/* Espacement typique entre colonnes (axe x) ou lignes (axe y) parmi des arbres en grille */
+function spacing(grid, axis) {
+  const pos = axis === 'x' ? 'xm' : 'ym', idx = axis === 'x' ? 'col' : 'row', same = axis === 'x' ? 'row' : 'col'
+  const steps = []
+  for (let i = 0; i < grid.length; i++) for (let j = i + 1; j < grid.length; j++) {
+    const a = grid[i], b = grid[j]
+    if (a[same] !== b[same] || a[idx] === b[idx]) continue
+    const s = (b[pos] - a[pos]) / (b[idx] - a[idx])
+    if (s > 0) steps.push(s)
+  }
+  return median(steps)
 }
 
-/* Calcule la ligne/colonne de chaque arbre libre (sans rien modifier) */
+/* Calcule, arbre par arbre, la case de chaque arbre libre à partir de ses voisins en grille */
 export function planGridSnap(trees, tol = 0.35) {
   const grid = trees.filter(t => t.row != null && t.col != null)
-  const fx = fitAxis(grid.map(t => [t.col, t.xm]))
-  const fy = fitAxis(grid.map(t => [t.row, t.ym]))
-  if (!fx || !fy) return { error: 'nogrid' }
-  if (fx.maxErr > Math.abs(fx.step) * tol || fy.maxErr > Math.abs(fy.step) * tol) return { error: 'irregular' }
-  const taken = new Set(grid.map(t => `${t.row}:${t.col}`))
+  const free = trees.filter(t => t.row == null || t.col == null)
+  const taken = new Map(grid.map(t => [`${t.row}:${t.col}`, t]))
+  const gsx = spacing(grid, 'x'), gsy = spacing(grid, 'y')
   const assign = [], skipped = []
-  trees.filter(t => t.row == null || t.col == null).forEach(t => {
-    const c = (t.xm - fx.origin) / fx.step, r = (t.ym - fy.origin) / fy.step
-    const col = Math.round(c), row = Math.round(r), key = `${row}:${col}`
-    if (row < 0 || col < 0 || Math.abs(c - col) > tol || Math.abs(r - row) > tol || taken.has(key)) { skipped.push(t); return }
-    taken.add(key); assign.push({ id: t.id, row, col })
+  const lbl = (r, c) => `L${r + 1}C${c + 1}`
+  const skip = (t, reason) => skipped.push({ tree: t, reason })
+
+  if (!grid.length || !gsx || !gsy) return { assign, skipped: free.map(t => ({ tree: t, reason: 'pas assez d\'arbres en grille' })) }
+
+  free.forEach(t => {
+    const near = grid
+      .map(g => ({ g, d: Math.hypot((g.xm - t.xm) / gsx, (g.ym - t.ym) / gsy) }))
+      .sort((a, b) => a.d - b.d).slice(0, 12)
+    if (near[0].d > 4) return skip(t, 'trop loin de la grille')
+    const local = near.map(n => n.g)
+    const sx = spacing(local, 'x') || gsx, sy = spacing(local, 'y') || gsy
+
+    // Chaque voisin "vote" pour une case ; les plus proches comptent le plus
+    const votes = {}
+    near.filter(n => n.d <= 3).forEach(({ g }, i) => {
+      const c = g.col + (t.xm - g.xm) / sx, r = g.row + (t.ym - g.ym) / sy
+      if (Math.abs(c - Math.round(c)) > tol || Math.abs(r - Math.round(r)) > tol) return
+      const k = `${Math.round(r)}:${Math.round(c)}`
+      votes[k] = (votes[k] || 0) + 1 / (i + 1)
+    })
+    const best = Object.entries(votes).sort((a, b) => b[1] - a[1])[0]
+    if (!best) return skip(t, 'entre deux cases')
+    const [row, col] = best[0].split(':').map(Number)
+    if (row < 0 || col < 0) return skip(t, 'hors de la grille')
+    if (taken.has(best[0])) return skip(t, `case ${lbl(row, col)} déjà occupée`)
+    taken.set(best[0], t)
+    assign.push({ id: t.id, row, col })
   })
   return { assign, skipped }
 }

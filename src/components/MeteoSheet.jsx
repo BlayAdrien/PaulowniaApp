@@ -11,8 +11,7 @@ export default function MeteoSheet({ open, onClose, onSave }) {
   const [fr,      setFr]     = useState('')
   const [to,      setTo]     = useState('')
   const [weather, setWeather]= useState('')
-  const [tmin,    setTmin]   = useState('')
-  const [tmax,    setTmax]   = useState('')
+  const [tavg,    setTavg]   = useState('')
   const [rain,    setRain]   = useState('')
   const [hum,     setHum]    = useState('')
   const [wind,    setWind]   = useState('')
@@ -21,7 +20,7 @@ export default function MeteoSheet({ open, onClose, onSave }) {
 
   useEffect(() => {
     if (open) {
-      setD1(today()); setWeather(''); setTmin(''); setTmax('')
+      setD1(today()); setWeather(''); setTavg('')
       setRain(''); setHum(''); setWind(''); setSun(''); setNotes(''); setPtype('day')
     }
   }, [open])
@@ -39,14 +38,14 @@ export default function MeteoSheet({ open, onClose, onSave }) {
     }
     if (ptype === 'range') {
       if (!fr) return null
-      return { type: 'range', label: `${fmt(fr)}${to ? ' → ' + fmt(to) : ''}`, sortKey: fr }
-    }
+      return { type: 'range', label: `${fmt(fr)}${to ? ' → ' + fmt(to) : ''}`, sortKey: fr, end: to || fr }
+      }
   }
 
   function handleSave() {
     const period = getPeriod()
     if (!period) return
-    onSave({ period, weather, tmin, tmax, rain, hum, wind, sun, notes })
+    onSave({ period, weather, tavg, rain, hum, wind, sun, notes })
   }
 
   return (
@@ -75,9 +74,8 @@ export default function MeteoSheet({ open, onClose, onSave }) {
           </div>
         </div></div>
 
-        <div className="fr">
-          <div className="fld"><label>T° min (°C)</label><input type="number" value={tmin} onChange={e => setTmin(e.target.value)} inputMode="decimal" /></div>
-          <div className="fld"><label>T° max (°C)</label><input type="number" value={tmax} onChange={e => setTmax(e.target.value)} inputMode="decimal" /></div>
+        <div className="fr full">
+          <div className="fld"><label>T° moyenne (°C)</label><input type="number" value={tavg} onChange={e => setTavg(e.target.value)} inputMode="decimal" step="0.1" /></div>
         </div>
         <div className="fr">
           <div className="fld"><label>Précip. (mm)</label><input type="number" value={rain} onChange={e => setRain(e.target.value)} min="0" inputMode="decimal" /></div>

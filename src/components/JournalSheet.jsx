@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import Sheet from './Sheet'
 import { today } from '../utils/helpers'
 
-export default function JournalSheet({ open, editEntry, onClose, onSave }) {
+export default function JournalSheet({ open, editEntry, defaultCat = '', cats = [], onClose, onSave }) {
   const [cat,   setCat]   = useState('')
   const [tit,   setTit]   = useState('')
   const [body,  setBody]  = useState('')
@@ -15,15 +15,17 @@ export default function JournalSheet({ open, editEntry, onClose, onSave }) {
       setBody(editEntry.body || ''); setDate(editEntry.date || today())
       setTrees(editEntry.trees || '')
     } else {
-      setCat(''); setTit(''); setBody(''); setDate(today()); setTrees('')
+      setCat(defaultCat); setTit(''); setBody(''); setDate(today()); setTrees('')
     }
-  }, [editEntry, open])
+  }, [editEntry, open, defaultCat])
 
   return (
     <Sheet open={open} onClose={onClose} title={editEntry ? '✏️ Modifier' : '📓 Nouvelle entrée'}>
       <div className="fb">
         <div className="fr full">
-          <div className="fld"><label>Catégorie</label><input value={cat} onChange={e => setCat(e.target.value)} placeholder="Taille, Traitement…" /></div>
+          <div className="fld"><label>Catégorie</label><input value={cat} onChange={e => setCat(e.target.value)} placeholder="Taille, Traitement…" list="jcats" />
+            <datalist id="jcats">{cats.map(c => <option key={c} value={c} />)}</datalist>
+          </div>        
         </div>
         <div className="fr full">
           <div className="fld"><label>Titre</label><input value={tit} onChange={e => setTit(e.target.value)} placeholder="ex: Première taille de formation" /></div>
