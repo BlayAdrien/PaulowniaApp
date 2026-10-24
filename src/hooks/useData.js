@@ -168,6 +168,13 @@ export function useData() {
     return { trees: final, fw: newFw, fh: newFh }
   }
 
+  function applyGridSnap(assign) {
+    const map = new Map(assign.map(a => [a.id, a]))
+    const next = renumber(trees.map(t => map.has(t.id) ? { ...t, row: map.get(t.id).row, col: map.get(t.id).col } : t))
+    setTreesRaw(next)
+    persist(next, journal, meteo, fw, fh)
+  }
+
   /* ── Journal ── */
   function saveJournalEntry(data, editId) {
     let next
@@ -214,7 +221,7 @@ export function useData() {
 
   return {
     trees, journal, meteo, fw, fh, cloud,
-    addTree, moveTree, updateTree, deleteTree, placeGrid,
+    addTree, moveTree, updateTree, deleteTree, placeGrid, applyGridSnap,
     saveJournalEntry, deleteJournalEntry,
     saveMeteoEntry, deleteMeteoEntry,
     importAll, clearAll,

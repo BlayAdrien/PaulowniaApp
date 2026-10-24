@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { useData }        from './hooks/useData'
 import { useToast }       from './hooks/useToast'
 import { calcPxPerM }     from './utils/canvas'
-import { uid, today, fmt } from './utils/helpers'
+import { uid, today, fmt, planGridSnap } from './utils/helpers'
 import { HEALTH_DEFS, GRASS_DEFS } from './utils/constants'
 import { signIn, signOut } from './utils/cloud'
 
@@ -174,6 +174,18 @@ export default function App() {
     navigator.clipboard?.writeText(data.cloud.user?.uid || '').then(() => showToast('📋 Identifiant copié'))
   }
 
+  function handleSnapGrid() {
+    const plan = planGridSnap(data.trees)
+    if (plan.error === 'nogrid')    { showToast('⚠️ Pas assez d\'arbres en grille pour la retrouver'); return }
+    if (plan.error === 'irregular') { showToast('⚠️ Grille irrégulière : rangement automatique impossible'); return }
+    if (!plan.assign.length)        { showToast(`Aucun arbre à ranger (${plan.skipped.length} restent libres)`); return }
+    if (!confirm(`${plan.assign.length} arbre(s) libre(s) vont recevoir un label L…C…\n` +
+                 `${plan.skipped.length} resteront libres (trop loin d'une case ou case déjà occupée).\n\nContinuer ?`)) return
+    data.applyGridSnap(plan.assign)
+    setSetOpen(false)
+    showToast(`✅ ${plan.assign.length} arbre(s) rangé(s) dans la grille`)
+  }
+
   function clearAll() {
     const where = data.cloud.user ? ' (sur ce téléphone ET dans le cloud)' : ''
     if (!confirm(`Supprimer TOUTES les données${where} ?`)) return
@@ -273,6 +285,7 @@ export default function App() {
         onExportJSON={exportJSON}
         onImportJSON={importJSON}
         onClearAll={clearAll}
+        onSnapGrid={handleSnapGrid}
       />
 
       <Toast msg={toastMsg} />

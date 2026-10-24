@@ -44,7 +44,7 @@ function CloudSection({ cloud, onSignIn, onSignOut, onCopyUid }) {
   )
 }
 
-export default function SettingsSheet({ open, onClose, cloud, onSignIn, onSignOut, onCopyUid, onExportCSV, onExportJSON, onImportJSON, onClearAll }) {
+export default function SettingsSheet({ open, onClose, cloud, onSignIn, onSignOut, onCopyUid, onSnapGrid, onExportCSV, onExportJSON, onImportJSON, onClearAll }) {  
   return (
     <Sheet open={open} onClose={onClose} title="⚙️ Réglages">
       <div className="fb">
@@ -59,6 +59,7 @@ export default function SettingsSheet({ open, onClose, cloud, onSignIn, onSignOu
         </div>
       </div>
       <div className="brow">
+        <button className="bd" onClick={onSnapGrid}>🔢 Ranger les arbres libres dans la grille</button>
         <button className="bd" onClick={onExportCSV}>📊 Exporter CSV arbres</button>
         <button className="bs" onClick={onClearAll}>⚠️ Réinitialiser toutes les données</button>
       </div>

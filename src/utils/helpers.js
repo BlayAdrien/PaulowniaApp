@@ -60,3 +60,36 @@ export function renumber(trees) {
   }
   return trees
 }
+
+/* Déduit la grille (espacement + origine) à partir des arbres déjà en grille */
+function fitAxis(pairs) {
+  const n = pairs.length
+  if (n < 2) return null
+  const mi = pairs.reduce((s, [i]) => s + i, 0) / n
+  const mp = pairs.reduce((s, [, p]) => s + p, 0) / n
+  let cov = 0, v = 0
+  pairs.forEach(([i, p]) => { cov += (i - mi) * (p - mp); v += (i - mi) ** 2 })
+  if (!v) return null
+  const step = cov / v
+  const origin = mp - step * mi
+  const maxErr = Math.max(...pairs.map(([i, p]) => Math.abs(origin + step * i - p)))
+  return { step, origin, maxErr }
+}
+
+/* Calcule la ligne/colonne de chaque arbre libre (sans rien modifier) */
+export function planGridSnap(trees, tol = 0.35) {
+  const grid = trees.filter(t => t.row != null && t.col != null)
+  const fx = fitAxis(grid.map(t => [t.col, t.xm]))
+  const fy = fitAxis(grid.map(t => [t.row, t.ym]))
+  if (!fx || !fy) return { error: 'nogrid' }
+  if (fx.maxErr > Math.abs(fx.step) * tol || fy.maxErr > Math.abs(fy.step) * tol) return { error: 'irregular' }
+  const taken = new Set(grid.map(t => `${t.row}:${t.col}`))
+  const assign = [], skipped = []
+  trees.filter(t => t.row == null || t.col == null).forEach(t => {
+    const c = (t.xm - fx.origin) / fx.step, r = (t.ym - fy.origin) / fy.step
+    const col = Math.round(c), row = Math.round(r), key = `${row}:${col}`
+    if (row < 0 || col < 0 || Math.abs(c - col) > tol || Math.abs(r - row) > tol || taken.has(key)) { skipped.push(t); return }
+    taken.add(key); assign.push({ id: t.id, row, col })
+  })
+  return { assign, skipped }
+}
