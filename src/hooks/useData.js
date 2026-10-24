@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { loadData, saveData } from '../utils/storage'
+import { useState, useEffect, useRef } from 'react'
+import { loadData, saveData, setSyncedUid, backupLocal, hasContent } from '../utils/storage'
+import { cloudEnabled, onUser, watchCloud, pushCloud, serialize } from '../utils/cloud'
 import { renumber, uid, today, fmt } from '../utils/helpers'
 import { HEALTH_DEFS, GRASS_DEFS } from '../utils/constants'
 
@@ -23,9 +24,88 @@ export function useData() {
 
   function setTrees(t) { setTreesRaw(renumber(t)) }
 
-  function persist(t, j, m, w, h) {
-    saveData({ trees: t, journal: j, meteo: m, fw: w, fh: h })
+  /* ── Synchro cloud ── */
+  const [cloud, setCloud] = useState({ user: null, status: cloudEnabled ? 'signed-out' : 'disabled', error: null })
+  const uidRef   = useRef(null)   // utilisateur connecté
+  const readyRef = useRef(false)  // première comparaison local ↔ cloud faite
+
+  function push(rec) {
+    if (!uidRef.current || !readyRef.current) return
+    pushCloud(uidRef.current, rec).catch(err => {
+      setCloud(c => ({ ...c, status: err?.code === 'permission-denied' ? 'denied' : 'error', error: err?.message }))
+    })
   }
+
+  function persist(t, j, m, w, h) {
+    push(saveData({ trees: t, journal: j, meteo: m, fw: w, fh: h }))
+  }
+
+  /* Remplace l'état par une version reçue du cloud (sans la renvoyer au cloud) */
+  function applyRemote(remote) {
+    const p = remote.data
+    const newT = renumber(p.trees || [])
+    setTreesRaw(newT); setJournal(p.journal || []); setMeteo(p.meteo || [])
+    setFw(p.fw || 50); setFh(p.fh || 40)
+    saveData({ trees: newT, journal: p.journal || [], meteo: p.meteo || [], fw: p.fw || 50, fh: p.fh || 40 },
+             { updatedAt: remote.updatedAt })
+  }
+
+  useEffect(() => {
+    if (!cloudEnabled) return
+    let unsubSnap = null
+
+    const unsubAuth = onUser(user => {
+      unsubSnap?.(); unsubSnap = null
+      readyRef.current = false
+      uidRef.current = user?.uid || null
+      if (!user) { setCloud({ user: null, status: 'signed-out', error: null }); return }
+      setCloud({ user, status: 'connecting', error: null })
+
+      unsubSnap = watchCloud(user.uid, ({ exists, remote, pending, fromCache }) => {
+        const local = loadData() || { trees: [], journal: [], meteo: [], fw: 50, fh: 40, updatedAt: 0 }
+
+        if (!readyRef.current) {
+          // On attend la réponse du serveur avant de décider quoi garder
+          if (fromCache) { setCloud(c => ({ ...c, status: 'offline' })); return }
+
+          if (!exists || !remote) {
+            // Premier passage : on envoie les données actuelles du téléphone
+            readyRef.current = true
+            push(saveData(local, { updatedAt: local.updatedAt || Date.now(), syncedUid: user.uid }))
+          } else {
+            const firstTime = local.syncedUid !== user.uid
+            const differ = serialize(local) !== remote.payload
+            let keepCloud = remote.updatedAt >= local.updatedAt
+            if (firstTime && differ && hasContent(local) && hasContent(remote.data)) {
+              keepCloud = confirm(
+                `Des données existent déjà dans le cloud (${remote.data.trees?.length || 0} arbre(s)) ` +
+                `et sur ce téléphone (${local.trees.length} arbre(s)).\n\n` +
+                `OK = garder celles du cloud\nAnnuler = garder celles du téléphone`
+              )
+            } else if (firstTime && !hasContent(local)) {
+              keepCloud = true
+            }
+            readyRef.current = true
+            if (keepCloud) {
+              if (differ) { backupLocal(); applyRemote(remote) }
+              setSyncedUid(user.uid)
+            } else {
+              push(saveData(local, { syncedUid: user.uid }))
+            }
+          }
+        } else if (exists && remote && !pending && remote.updatedAt > local.updatedAt) {
+          // Modification faite depuis un autre appareil
+          applyRemote(remote)
+        }
+
+        setCloud(c => ({ ...c, status: pending ? 'pending' : fromCache ? 'offline' : 'synced', error: null }))
+      }, err => {
+        setCloud(c => ({ ...c, status: err?.code === 'permission-denied' ? 'denied' : 'error', error: err?.message }))
+      })
+    })
+
+    return () => { unsubAuth(); unsubSnap?.() }
+  }, [])
 
   /* ── Arbres ── */
   function addTree(xm, ym) {
@@ -123,17 +203,17 @@ export function useData() {
     const newT = renumber(p.trees || [])
     setTreesRaw(newT); setJournal(p.journal || []); setMeteo(p.meteo || [])
     if (p.fw) setFw(p.fw); if (p.fh) setFh(p.fh)
-    saveData({ trees: newT, journal: p.journal || [], meteo: p.meteo || [], fw: p.fw || fw, fh: p.fh || fh })
+    persist(newT, p.journal || [], p.meteo || [], p.fw || fw, p.fh || fh)
     return newT.length
   }
 
   function clearAll() {
-    setTreesRaw([]); setJournal([]); setMeteo([])
-    saveData({ trees: [], journal: [], meteo: [], fw: 50, fh: 40 })
+    setTreesRaw([]); setJournal([]); setMeteo([]); setFw(50); setFh(40)
+    persist([], [], [], 50, 40)
   }
 
   return {
-    trees, journal, meteo, fw, fh,
+    trees, journal, meteo, fw, fh, cloud,
     addTree, moveTree, updateTree, deleteTree, placeGrid,
     saveJournalEntry, deleteJournalEntry,
     saveMeteoEntry, deleteMeteoEntry,

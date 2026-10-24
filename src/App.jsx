@@ -4,6 +4,7 @@ import { useToast }       from './hooks/useToast'
 import { calcPxPerM }     from './utils/canvas'
 import { uid, today, fmt } from './utils/helpers'
 import { HEALTH_DEFS, GRASS_DEFS } from './utils/constants'
+import { signIn, signOut } from './utils/cloud'
 
 import PageChamp    from './components/PageChamp'
 import PageListe    from './components/PageListe'
@@ -162,8 +163,20 @@ export default function App() {
     input.click()
   }
 
+    /* ── Cloud ── */
+  async function handleSignIn() {
+    try { await signIn() } catch (e) { showToast('⚠️ Connexion impossible : ' + (e?.code || 'erreur')) }
+  }
+  async function handleSignOut() {
+    await signOut(); showToast('Déconnecté (les données restent sur ce téléphone)')
+  }
+  function handleCopyUid() {
+    navigator.clipboard?.writeText(data.cloud.user?.uid || '').then(() => showToast('📋 Identifiant copié'))
+  }
+
   function clearAll() {
-    if (!confirm('Supprimer TOUTES les données ?')) return
+    const where = data.cloud.user ? ' (sur ce téléphone ET dans le cloud)' : ''
+    if (!confirm(`Supprimer TOUTES les données${where} ?`)) return
     data.clearAll(); setSetOpen(false); showToast('Données effacées')
   }
 
@@ -173,7 +186,12 @@ export default function App() {
       <div className="hdr">
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <h1>🌿 Paulownia App</h1>
-          <span className="hdr-sub">{data.trees.length} arbre{data.trees.length !== 1 ? 's' : ''}</span>
+          <span className="hdr-sub">
+            {data.trees.length} arbre{data.trees.length !== 1 ? 's' : ''}
+            {data.cloud.status === 'synced' && ' · ☁️'}
+            {data.cloud.status === 'pending' && ' · ⏳'}
+            {(data.cloud.status === 'denied' || data.cloud.status === 'error') && ' · ⚠️'}
+          </span>
         </div>
         <button className="hdr-btn" onClick={() => setSetOpen(true)}>⚙️ Réglages</button>
       </div>
@@ -247,6 +265,10 @@ export default function App() {
       <SettingsSheet
         open={setOpen}
         onClose={() => setSetOpen(false)}
+        cloud={data.cloud}
+        onSignIn={handleSignIn}
+        onSignOut={handleSignOut}
+        onCopyUid={handleCopyUid}
         onExportCSV={exportCSV}
         onExportJSON={exportJSON}
         onImportJSON={importJSON}
