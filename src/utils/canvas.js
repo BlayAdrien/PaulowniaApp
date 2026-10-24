@@ -1,16 +1,11 @@
 import { TARGET_PX, MARGIN, HEALTH_DEFS, GRASS_DEFS, GRASS_STYLE } from './constants'
+import { getLattice } from './helpers'
 
+/* Espacement entre arbres (m), déduit des arbres numérotés : robuste aux arbres posés à la main */
 export function detectSpacing(trees) {
-  if (trees.length < 2) return 5
-  const xs = [...new Set(trees.map(t => Math.round(t.xm * 2) / 2))].sort((a, b) => a - b)
-  if (xs.length < 2) return 5
-  const diffs = []
-  for (let i = 1; i < Math.min(xs.length, 8); i++) {
-    const d = xs[i] - xs[i - 1]
-    if (d > 0.3) diffs.push(d)
-  }
-  if (!diffs.length) return 5
-  return diffs.reduce((a, b) => a + b, 0) / diffs.length
+  if (!trees.some(t => t.row != null)) return 5
+  const { sx, sy } = getLattice(trees)
+  return Math.min(sx, sy) || 5
 }
 
 export function calcPxPerM(trees) {
@@ -159,7 +154,7 @@ export function drawTree(ctx, cx, cy, r, crown, trunk, selected, label, grassKey
   ctx.globalAlpha = 1
 }
 
-export function renderCanvas({ canvas, trees, fw, fh, panX, panY, ppm, zoom, selId, gridPrev }) {
+export function renderCanvas({ canvas, trees, fw, fh, panX, panY, ppm, zoom, selId, hiId, gridPrev }) {
   if (!canvas) return
   const ctx = canvas.getContext('2d')
   const wrap = canvas.parentElement
@@ -198,10 +193,25 @@ export function renderCanvas({ canvas, trees, fw, fh, panX, panY, ppm, zoom, sel
   }
 
   // Arbres
+  const spacingPx = TARGET_PX * zoom          // distance à l'écran entre deux arbres voisins
+  const overview  = spacingPx < 26            // très dézoomé : simples points de couleur
+  const showLabel = spacingPx >= 34           // étiquettes seulement quand il y a la place
   trees.forEach(t => {
     const { cx, cy } = m2c(t.xm, t.ym, panX, panY, ppm, zoom)
+    if (cx < -40 || cy < -40 || cx > W + 40 || cy > H + 40) return   // hors écran
+    const { crown } = hColors(t.sante)
+    if (overview) {
+      const rd = Math.max(1.8, spacingPx * 0.36)
+      ctx.beginPath(); ctx.arc(cx, cy, rd, 0, Math.PI * 2)
+      ctx.fillStyle = crown; ctx.globalAlpha = 1; ctx.fill()
+      if (t.id === selId || t.id === hiId) {
+        ctx.beginPath(); ctx.arc(cx, cy, rd + 4, 0, Math.PI * 2)
+        ctx.strokeStyle = '#f0a030'; ctx.lineWidth = 2.5; ctx.stroke()
+      }
+      return
+    }
     const r = treeRadius(t.hauteur, zoom)
-    const { crown, trunk } = hColors(t.sante)
-    drawTree(ctx, cx, cy, r, crown, trunk, t.id === selId, t._label, t.grass || 'g0')
+    const { trunk } = hColors(t.sante)
+    drawTree(ctx, cx, cy, r, crown, trunk, t.id === selId || t.id === hiId, showLabel ? t._label : null, t.grass || 'g0')
   })
 }
