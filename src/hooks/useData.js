@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { loadData, saveData, setSyncedUid, backupLocal, hasContent } from '../utils/storage'
 import { cloudEnabled, onUser, watchCloud, pushCloud, serialize } from '../utils/cloud'
-import { renumber, uid, today, fmt } from '../utils/helpers'
+import { renumber, uid, today, fmt, getLattice, cellPos } from '../utils/helpers'
 import { HEALTH_DEFS, GRASS_DEFS } from '../utils/constants'
 
 function makeTree(xm, ym, extra = {}) {
@@ -108,18 +108,32 @@ export function useData() {
   }, [])
 
   /* ── Arbres ── */
-  function addTree(xm, ym) {
-    const t = makeTree(xm, ym)
-    const next = renumber([...trees, t])
-    setTreesRaw(next)
-    persist(next, journal, meteo, fw, fh)
-    return t
+
+  /* Ajoute un arbre (id absent) ou déplace un arbre existant sur la case row/col.
+     Renvoie l'arbre, ou une erreur si la case est déjà prise. */
+  function placeTree(row, col, id = null) {
+    const other = trees.find(t => t.row === row && t.col === col && t.id !== id)
+    if (other) return { error: 'occupied', other }
+    const lat = getLattice(trees.filter(t => t.id !== id))
+    const pos = cellPos(lat, row, col)
+    let placed
+    const next = id
+      ? trees.map(t => t.id === id ? (placed = { ...t, row, col, ...pos }) : t)
+      : [...trees, (placed = makeTree(pos.xm, pos.ym, { row, col }))]
+    const final = renumber(next)
+    const newFw = Math.max(fw, Math.ceil(pos.xm + lat.sx)), newFh = Math.max(fh, Math.ceil(pos.ym + lat.sy))
+    setTreesRaw(final); setFw(newFw); setFh(newFh)
+    persist(final, journal, meteo, newFw, newFh)
+    return { tree: final.find(t => t.id === placed.id) }
   }
 
-  function moveTree(id, xm, ym) {
-    const next = renumber(trees.map(t =>
-      t.id === id ? { ...t, xm: Math.max(0, Math.min(fw, xm)), ym: Math.max(0, Math.min(fh, ym)) } : t
-    ))
+  /* Applique les cases recalculées (rangement / renumérotation) */
+  function applyCells(assign) {
+    const map = new Map(assign.map(a => [a.id, a]))
+    const next = renumber(trees.map(t => {
+      const a = map.get(t.id)
+      return a ? { ...t, row: a.row, col: a.col, xm: a.xm ?? t.xm, ym: a.ym ?? t.ym } : t
+    }))
     setTreesRaw(next)
     persist(next, journal, meteo, fw, fh)
   }
@@ -160,19 +174,13 @@ export function useData() {
       const maxY = Math.max(...pos.map(p => p.ym))
       newFw = Math.max(fw, maxX + cfg.sx)
       newFh = Math.max(fh, maxY + cfg.sy)
-      newTrees = [...trees, ...pos.map(p => makeTree(p.xm, p.ym, { row: p.row, col: p.col }))]
+      const colShift = Math.round(offsetX / cfg.sx)  // la nouvelle grille continue la numérotation des colonnes
+      newTrees = [...trees, ...pos.map(p => makeTree(p.xm, p.ym, { row: p.row, col: p.col + colShift }))]
     }
     const final = renumber(newTrees)
     setTreesRaw(final); setFw(newFw); setFh(newFh)
     persist(final, journal, meteo, newFw, newFh)
     return { trees: final, fw: newFw, fh: newFh }
-  }
-
-  function applyGridSnap(assign) {
-    const map = new Map(assign.map(a => [a.id, a]))
-    const next = renumber(trees.map(t => map.has(t.id) ? { ...t, row: map.get(t.id).row, col: map.get(t.id).col } : t))
-    setTreesRaw(next)
-    persist(next, journal, meteo, fw, fh)
   }
 
   /* ── Journal ── */
@@ -221,7 +229,7 @@ export function useData() {
 
   return {
     trees, journal, meteo, fw, fh, cloud,
-    addTree, moveTree, updateTree, deleteTree, placeGrid, applyGridSnap,
+    placeTree, applyCells, updateTree, deleteTree, placeGrid,
     saveJournalEntry, deleteJournalEntry,
     saveMeteoEntry, deleteMeteoEntry,
     importAll, clearAll,

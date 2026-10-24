@@ -4,7 +4,7 @@ import GrassIcon from './GrassIcon'
 import { HEALTH_DEFS, GRASS_DEFS } from '../utils/constants'
 import { fmt } from '../utils/helpers'
 
-export default function TreeSheet({ tree, onClose, onSave, onDelete }) {
+export default function TreeSheet({ tree, onClose, onSave, onDelete, onMove }) {
   const [name,     setName]     = useState('')
   const [hauteur,  setHauteur]  = useState('')
   const [diametre, setDiametre] = useState('')
@@ -35,6 +35,7 @@ export default function TreeSheet({ tree, onClose, onSave, onDelete }) {
           ? <span className="pbadge pbg">🟩 Grille · L{tree.row + 1}C{tree.col + 1}</span>
           : <span className="pbadge pbf">🟧 Libre · {tree._label || '?'}</span>
         }
+        <button className="bs" style={{ marginLeft: 8, padding: '4px 12px', fontSize: 12 }} onClick={onMove}>📍 Déplacer</button>
       </div>
 
       <div className="fb">

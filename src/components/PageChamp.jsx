@@ -1,15 +1,14 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
-import { renderCanvas, calcPxPerM, m2c, c2m, treeRadius } from '../utils/canvas'
+import { renderCanvas, calcPxPerM, m2c, treeRadius } from '../utils/canvas'
 import { HEALTH_DEFS, MARGIN } from '../utils/constants'
 
 const INIT_PPM = 18
 
-export default function PageChamp({ trees, fw, fh, active, onAddTree, onSelectTree, onMoveTree, onOpenGrid, gridPrev, selId }) {
+export default function PageChamp({ trees, fw, fh, active, onAddTree, onSelectTree, onOpenGrid, gridPrev, selId }) {
   const canvasRef = useRef(null)
-  const stateRef  = useRef({ zoom: 1, panX: 0, panY: 0, ppm: INIT_PPM, viewOnly: false })
-  const interRef  = useRef({ moved: false, dragT: null, panS: null, pinchS: null, mdown: false, mmoved: false })
+  const stateRef  = useRef({ zoom: 1, panX: 0, panY: 0, ppm: INIT_PPM })
+  const interRef  = useRef({ moved: false, panS: null, pinchS: null, mdown: false, mmoved: false })
   const [zoom, setZoom] = useState(1)
-  const [viewOnly, setViewOnly] = useState(false)
 
   const doRender = useCallback(() => {
     const s = stateRef.current
@@ -65,7 +64,7 @@ export default function PageChamp({ trees, fw, fh, active, onAddTree, onSelectTr
     const s = stateRef.current, ir = interRef.current
     ir.moved = false
     if (e.touches.length === 2) {
-      ir.dragT = null; ir.panS = null
+      ir.panS = null
       const a = e.touches[0], b = e.touches[1]
       ir.pinchS = {
         dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
@@ -76,9 +75,7 @@ export default function PageChamp({ trees, fw, fh, active, onAddTree, onSelectTr
     }
     ir.pinchS = null
     const { cx, cy } = getXY(e)
-    const hit = hitTree(cx, cy)
-    if (hit && !s.viewOnly) { ir.dragT = { id: hit.id, startXm: hit.xm, startYm: hit.ym, startCX: cx, startCY: cy }; ir.panS = null }
-    else { ir.panS = { x: cx, y: cy, panX0: s.panX, panY0: s.panY }; ir.dragT = null }
+    ir.panS = { x: cx, y: cy, panX0: s.panX, panY0: s.panY }
   }
 
   function onTouchMove(e) {
@@ -98,12 +95,10 @@ export default function PageChamp({ trees, fw, fh, active, onAddTree, onSelectTr
     }
     if (e.touches.length !== 1) return
     const { cx, cy } = getXY(e)
-    if (ir.dragT) {
-      onMoveTree(ir.dragT.id,
-        ir.dragT.startXm + (cx - ir.dragT.startCX) / (s.ppm * s.zoom),
-        ir.dragT.startYm + (cy - ir.dragT.startCY) / (s.ppm * s.zoom)
-      )
-    } else if (ir.panS) {
+    if (ir.panS) {
+      // un petit tremblement du doigt compte encore comme un simple toucher
+      if (!ir.panS.passed && Math.hypot(cx - ir.panS.x, cy - ir.panS.y) < 6) { ir.moved = false; return }
+      ir.panS.passed = true
       s.panX = ir.panS.panX0 + (cx - ir.panS.x)
       s.panY = ir.panS.panY0 + (cy - ir.panS.y)
       doRender()
@@ -114,45 +109,33 @@ export default function PageChamp({ trees, fw, fh, active, onAddTree, onSelectTr
     e.preventDefault()
     const s = stateRef.current, ir = interRef.current
     if (ir.pinchS && e.touches.length < 2) { ir.pinchS = null; return }
-    if (ir.dragT) { ir.dragT = null; return }
     ir.panS = null
     if (!ir.moved) {
       const { cx, cy } = getEndXY(e)
       const hit = hitTree(cx, cy)
       if (hit) onSelectTree(hit.id)
-      else if (!s.viewOnly) {
-        const { xm, ym } = c2m(cx, cy, s.panX, s.panY, s.ppm, s.zoom)
-        if (xm >= 0 && xm <= fw && ym >= 0 && ym <= fh) onAddTree(xm, ym)
-      }
     }
   }
 
   function onMouseDown(e) {
     const ir = interRef.current, s = stateRef.current
     ir.mdown = true; ir.mmoved = false
-    const { cx, cy } = getXY(e), hit = hitTree(cx, cy)
-    if (hit && !s.viewOnly) ir.dragT = { id: hit.id, startXm: hit.xm, startYm: hit.ym, startCX: cx, startCY: cy }
-    else ir.panS = { x: cx, y: cy, panX0: s.panX, panY0: s.panY }
+    const { cx, cy } = getXY(e)
+    ir.panS = { x: cx, y: cy, panX0: s.panX, panY0: s.panY }
   }
   function onMouseMove(e) {
     const ir = interRef.current, s = stateRef.current
     if (!ir.mdown) return; ir.mmoved = true
     const { cx, cy } = getXY(e)
-    if (ir.dragT) onMoveTree(ir.dragT.id, ir.dragT.startXm + (cx - ir.dragT.startCX) / (s.ppm * s.zoom), ir.dragT.startYm + (cy - ir.dragT.startCY) / (s.ppm * s.zoom))
-    else if (ir.panS) { s.panX = ir.panS.panX0 + (cx - ir.panS.x); s.panY = ir.panS.panY0 + (cy - ir.panS.y); doRender() }
+    if (ir.panS) { s.panX = ir.panS.panX0 + (cx - ir.panS.x); s.panY = ir.panS.panY0 + (cy - ir.panS.y); doRender() }
   }
   function onMouseUp(e) {
     const ir = interRef.current, s = stateRef.current
     ir.mdown = false
-    if (ir.dragT) { ir.dragT = null; return }
     ir.panS = null
     if (!ir.mmoved) {
       const { cx, cy } = getEndXY(e), hit = hitTree(cx, cy)
       if (hit) onSelectTree(hit.id)
-      else if (!s.viewOnly) {
-        const { xm, ym } = c2m(cx, cy, s.panX, s.panY, s.ppm, s.zoom)
-        if (xm >= 0 && xm <= fw && ym >= 0 && ym <= fh) onAddTree(xm, ym)
-      }
     }
   }
   function onWheel(e) {
@@ -168,18 +151,13 @@ export default function PageChamp({ trees, fw, fh, active, onAddTree, onSelectTr
   function zIn()    { const s = stateRef.current; s.zoom = Math.min(8, s.zoom * 1.35); setZoom(s.zoom); doRender() }
   function zOut()   { const s = stateRef.current; s.zoom = Math.max(0.05, s.zoom / 1.35); setZoom(s.zoom); doRender() }
   function zReset() { const s = stateRef.current; s.ppm = calcPxPerM(trees); s.zoom = 1; s.panX = 0; s.panY = 0; setZoom(1); doRender() }
-  function toggleVO() { stateRef.current.viewOnly = !stateRef.current.viewOnly; setViewOnly(v => !v) }
 
   return (
     <>
       <div id="page-champ" className={`page${active ? ' active' : ''}`}>
         <div className="modebar">
-          <span className="mode-hint">
-            {viewOnly ? 'Défilez et zoomez librement' : 'Touchez pour ajouter · Glissez pour déplacer'}
-          </span>
-          <button className={`mode-toggle${viewOnly ? ' edit' : ' view'}`} onClick={toggleVO}>
-            {viewOnly ? '✏️ Mode édition' : '👁 Voir seulement'}
-          </button>
+          <span className="mode-hint">Touchez un arbre pour l'ouvrir</span>
+          <button className="mode-toggle edit" onClick={onAddTree}>🌱 Ajouter un arbre</button>
         </div>
 
         <div id="cwrap">

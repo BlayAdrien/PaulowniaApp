@@ -61,56 +61,74 @@ export function renumber(trees) {
   return trees
 }
 
-const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)] }
+/* ══ Grille : chaque case Lx Cy correspond à une position fixe ══════════════
+   x = x0 + colonne × espacementX     y = y0 + ligne × espacementY        */
 
-/* Espacement typique entre colonnes (axe x) ou lignes (axe y) parmi des arbres en grille */
-function spacing(grid, axis) {
-  const pos = axis === 'x' ? 'xm' : 'ym', idx = axis === 'x' ? 'col' : 'row', same = axis === 'x' ? 'row' : 'col'
-  const steps = []
-  for (let i = 0; i < grid.length; i++) for (let j = i + 1; j < grid.length; j++) {
-    const a = grid[i], b = grid[j]
-    if (a[same] !== b[same] || a[idx] === b[idx]) continue
-    const s = (b[pos] - a[pos]) / (b[idx] - a[idx])
-    if (s > 0) steps.push(s)
-  }
-  return median(steps)
+/* Valeur la plus fréquente (arrondie au dixième) ; à égalité, la plus petite */
+function mode(vals) {
+  const cnt = {}
+  vals.forEach(v => { const k = Math.round(v * 10) / 10; cnt[k] = (cnt[k] || 0) + 1 })
+  return Object.entries(cnt).map(([k, n]) => [+k, n]).sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null
 }
 
-/* Calcule, arbre par arbre, la case de chaque arbre libre à partir de ses voisins en grille */
-export function planGridSnap(trees, tol = 0.35) {
-  const grid = trees.filter(t => t.row != null && t.col != null)
-  const free = trees.filter(t => t.row == null || t.col == null)
-  const taken = new Map(grid.map(t => [`${t.row}:${t.col}`, t]))
-  const gsx = spacing(grid, 'x'), gsy = spacing(grid, 'y')
-  const assign = [], skipped = []
-  const lbl = (r, c) => `L${r + 1}C${c + 1}`
-  const skip = (t, reason) => skipped.push({ tree: t, reason })
+function axisLattice(values, fallback) {
+  const u = [...new Set(values.map(v => Math.round(v * 10) / 10))].sort((a, b) => a - b)
+  const gaps = []
+  for (let i = 1; i < u.length; i++) if (u[i] - u[i - 1] > 0.5) gaps.push(u[i] - u[i - 1])
+  const step = mode(gaps) || fallback
+  let origin = mode(values.map(v => ((v % step) + step) % step)) ?? 0
+  if (step - origin < 0.15) origin = 0
+  return { step, origin }
+}
 
-  if (!grid.length || !gsx || !gsy) return { assign, skipped: free.map(t => ({ tree: t, reason: 'pas assez d\'arbres en grille' })) }
+/* Déduit la grille (espacement + origine) à partir des positions des arbres */
+export function getLattice(trees, fallback = 5) {
+  const x = axisLattice(trees.map(t => t.xm), fallback)
+  const y = axisLattice(trees.map(t => t.ym), fallback)
+  return { sx: x.step, x0: x.origin, sy: y.step, y0: y.origin }
+}
 
-  free.forEach(t => {
-    const near = grid
-      .map(g => ({ g, d: Math.hypot((g.xm - t.xm) / gsx, (g.ym - t.ym) / gsy) }))
-      .sort((a, b) => a.d - b.d).slice(0, 12)
-    if (near[0].d > 4) return skip(t, 'trop loin de la grille')
-    const local = near.map(n => n.g)
-    const sx = spacing(local, 'x') || gsx, sy = spacing(local, 'y') || gsy
+export function cellPos(lat, row, col) {
+  return { xm: +(lat.x0 + col * lat.sx).toFixed(3), ym: +(lat.y0 + row * lat.sy).toFixed(3) }
+}
 
-    // Chaque voisin "vote" pour une case ; les plus proches comptent le plus
-    const votes = {}
-    near.filter(n => n.d <= 3).forEach(({ g }, i) => {
-      const c = g.col + (t.xm - g.xm) / sx, r = g.row + (t.ym - g.ym) / sy
-      if (Math.abs(c - Math.round(c)) > tol || Math.abs(r - Math.round(r)) > tol) return
-      const k = `${Math.round(r)}:${Math.round(c)}`
-      votes[k] = (votes[k] || 0) + 1 / (i + 1)
-    })
-    const best = Object.entries(votes).sort((a, b) => b[1] - a[1])[0]
-    if (!best) return skip(t, 'entre deux cases')
-    const [row, col] = best[0].split(':').map(Number)
-    if (row < 0 || col < 0) return skip(t, 'hors de la grille')
-    if (taken.has(best[0])) return skip(t, `case ${lbl(row, col)} déjà occupée`)
-    taken.set(best[0], t)
-    assign.push({ id: t.id, row, col })
+export const cellLabel = (row, col) => `L${row + 1}C${col + 1}`
+
+/* "L19C9", "l19 c9", "19-9"… → { row: 18, col: 8 } */
+export function parseCell(str) {
+  const m = String(str || '').trim().match(/^l?\s*(\d+)\s*[c\-\s,;/]\s*(\d+)$/i)
+  if (!m) return null
+  const row = +m[1] - 1, col = +m[2] - 1
+  return row >= 0 && col >= 0 ? { row, col } : null
+}
+
+export const treeName = t => t.name || t._label || 'Arbre'
+
+/* Recalcule la case de chaque arbre à partir de sa position (sans rien modifier) */
+export function planRenumber(trees, tol = 0.3) {
+  const lat = getLattice(trees)
+  const best = new Map()   // case → { t, err, row, col }
+  const skipped = []
+  trees.forEach(t => {
+    const c = (t.xm - lat.x0) / lat.sx, r = (t.ym - lat.y0) / lat.sy
+    const col = Math.round(c), row = Math.round(r)
+    const err = Math.max(Math.abs(c - col), Math.abs(r - row))
+    if (err > tol)          return skipped.push({ tree: t, reason: 'entre deux cases' })
+    if (row < 0 || col < 0) return skipped.push({ tree: t, reason: 'hors de la grille' })
+    const k = `${row}:${col}`, cur = best.get(k)
+    const cand = { t, err, row, col }
+    if (!cur) best.set(k, cand)
+    else if (err < cur.err) { skipped.push({ tree: cur.t, reason: `même case que ${treeName(t)} (${cellLabel(row, col)})` }); best.set(k, cand) }
+    else skipped.push({ tree: t, reason: `même case que ${treeName(cur.t)} (${cellLabel(row, col)})` })
   })
-  return { assign, skipped }
+  const assign = [], changes = []
+  best.forEach(({ t, row, col }) => {
+    const pos = cellPos(lat, row, col)
+    const relabel = t.row !== row || t.col !== col
+    if (relabel || Math.abs(t.xm - pos.xm) > 0.001 || Math.abs(t.ym - pos.ym) > 0.001) {
+      assign.push({ id: t.id, row, col, ...pos })
+      if (relabel) changes.push({ tree: t, from: t._label || '?', to: cellLabel(row, col) })
+    }
+  })
+  return { lat, assign, changes, skipped }
 }

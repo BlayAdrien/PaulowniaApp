@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { useData }        from './hooks/useData'
 import { useToast }       from './hooks/useToast'
 import { calcPxPerM }     from './utils/canvas'
-import { uid, today, fmt, planGridSnap } from './utils/helpers'
+import { uid, today, fmt, planRenumber, cellLabel, treeName } from './utils/helpers'
 import { HEALTH_DEFS, GRASS_DEFS } from './utils/constants'
 import { signIn, signOut } from './utils/cloud'
 
@@ -17,6 +17,7 @@ import ConfirmSheet from './components/ConfirmSheet'
 import JournalSheet from './components/JournalSheet'
 import MeteoSheet   from './components/MeteoSheet'
 import SettingsSheet from './components/SettingsSheet'
+import PlaceSheet   from './components/PlaceSheet'
 import Toast        from './components/Toast'
 
 const TABS = [
@@ -42,11 +43,16 @@ export default function App() {
   const [jCat,     setJCat]     = useState('')
   const [mOpen,    setMOpen]    = useState(false)
   const [setOpen,  setSetOpen]  = useState(false)
+  const [placeFor, setPlaceFor] = useState(null)   // null = fermé · 'new' = ajout · arbre = déplacement
 
   /* ── Arbres ── */
-  function handleAddTree(xm, ym) {
-    data.addTree(xm, ym)
-    showToast('Arbre ajouté — appuyez dessus pour renseigner')
+  function handlePlace(cell) {
+    const moving = placeFor !== 'new'
+    const res = data.placeTree(cell.row, cell.col, moving ? placeFor.id : null)
+    if (res.error) { showToast(`⛔ Place déjà occupée par ${treeName(res.other)}`); return }
+    setPlaceFor(null)
+    showToast(moving ? `📍 Déplacé en ${cellLabel(cell.row, cell.col)}` : `🌱 Arbre ajouté en ${cellLabel(cell.row, cell.col)}`)
+    setSelId(res.tree.id); setSelTree(res.tree)   // ouvre sa fiche
   }
   function handleSelectTree(id) {
     setSelId(id)
@@ -175,20 +181,25 @@ export default function App() {
     navigator.clipboard?.writeText(data.cloud.user?.uid || '').then(() => showToast('📋 Identifiant copié'))
   }
 
-  function handleSnapGrid() {
-    const { assign, skipped } = planGridSnap(data.trees)
-    if (!assign.length && !skipped.length) { showToast('Aucun arbre libre à ranger'); return }
-    const list = skipped.slice(0, 15).map(({ tree: t, reason }) =>
-      `• ${t.name || t._label || 'Arbre'} (x ${Math.round(t.xm)} m, y ${Math.round(t.ym)} m) : ${reason}`).join('\n')
-    const more = skipped.length > 15 ? `\n… et ${skipped.length - 15} autre(s)` : ''
-    if (!assign.length) { alert(`Aucun arbre n'a pu être rangé :\n\n${list}${more}`); return }
-    if (!confirm(`${assign.length} arbre(s) vont être rangés dans la grille.` +
-      (skipped.length ? `\n\n${skipped.length} ne peuvent pas l'être :\n${list}${more}` : '') +
-      '\n\nContinuer ?')) return
-    data.applyGridSnap(assign)
+  function handleRenumber() {
+    const { assign, changes, skipped } = planRenumber(data.trees)
+    const line = t => `${treeName(t)} (x ${Math.round(t.xm)} m, y ${Math.round(t.ym)} m)`
+    const cut = (arr, f) => arr.slice(0, 12).map(f).join('\n') + (arr.length > 12 ? `\n… et ${arr.length - 12} autre(s)` : '')
+    if (!assign.length) {
+      alert('Tous les arbres ont déjà le bon numéro.' + (skipped.length ? `\n\nNon traités :\n${cut(skipped, s => `• ${line(s.tree)} : ${s.reason}`)}` : ''))
+      return
+    }
+    const msg = (changes.length
+        ? `${changes.length} numéro(s) vont changer :\n${cut(changes, c => `• ${c.from} → ${c.to}  (x ${Math.round(c.tree.xm)} m, y ${Math.round(c.tree.ym)} m)`)}`
+        : 'Aucun numéro ne change, seules les positions sont recalées sur la grille.')
+      + (skipped.length ? `\n\n${skipped.length} arbre(s) non traités :\n${cut(skipped, s => `• ${line(s.tree)} : ${s.reason}`)}` : '')
+      + '\n\nContinuer ?'
+    if (!confirm(msg)) return
+    data.applyCells(assign)
     setSetOpen(false)
-    showToast(`✅ ${assign.length} rangé(s)` + (skipped.length ? ` · ${skipped.length} restent libres` : ''))
+    showToast(`✅ ${changes.length} renuméroté(s)` + (skipped.length ? ` · ${skipped.length} non traités` : ''))
   }
+
 
   function clearAll() {
     const where = data.cloud.user ? ' (sur ce téléphone ET dans le cloud)' : ''
@@ -219,9 +230,8 @@ export default function App() {
           active={tab === 'champ'}
           selId={selId}
           gridPrev={gridPrev}
-          onAddTree={handleAddTree}
+          onAddTree={() => setPlaceFor('new')}
           onSelectTree={handleSelectTree}
-          onMoveTree={data.moveTree}
           onOpenGrid={() => setGridOpen(true)}
         />
         <PageListe
@@ -257,6 +267,14 @@ export default function App() {
         onClose={() => { setSelTree(null); setSelId(null) }}
         onSave={handleSaveTree}
         onDelete={handleDeleteTree}
+        onMove={() => { const t = selTree; setSelTree(null); setSelId(null); setPlaceFor(t) }}
+      />
+      <PlaceSheet
+        open={!!placeFor}
+        tree={placeFor && placeFor !== 'new' ? placeFor : null}
+        trees={data.trees}
+        onClose={() => setPlaceFor(null)}
+        onConfirm={handlePlace}
       />
       <GridSheet
         open={gridOpen}
@@ -291,7 +309,7 @@ export default function App() {
         onExportJSON={exportJSON}
         onImportJSON={importJSON}
         onClearAll={clearAll}
-        onSnapGrid={handleSnapGrid}
+        onSnapGrid={handleRenumber}
       />
 
       <Toast msg={toastMsg} />
