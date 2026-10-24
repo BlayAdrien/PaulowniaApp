@@ -1,85 +1,85 @@
-# 🌿 Paulownia App
+# Paulownia App
 
-PWA de suivi de champ d'arbres, construite avec **Vite + React**.
+Application web (PWA) de suivi d'un champ de paulownias, construite avec Vite et React.
+Elle fonctionne sur téléphone, y compris hors-ligne.
 
-## Démarrage rapide
+## Fonctionnalités
+
+- **Champ** : carte des arbres sur une grille (cases LxCy). Ouverture ajustée à la largeur de l'écran,
+  zoom par pincement ou double-toucher, recherche d'une case (« Aller à… L19C7 »),
+  vue d'ensemble en points de couleur quand on dézoome.
+- **Arbres** : ajout ou déplacement en saisissant une case (ex. L19C9), avec contrôle des places
+  déjà occupées. Fiche par arbre : hauteur, diamètre, santé, herbe au pied, notes, historique.
+- **Liste** : tous les arbres, triables et filtrables.
+- **Journal** : entrées classées en dossiers par catégorie, du plus récent au plus ancien.
+- **Météo** : relevés (journée, semaine ou période libre) avec température moyenne et pluie.
+  Récapitulatif mois par mois de l'année choisie.
+- **Réglages** : connexion au cloud, export/import JSON, export CSV, renumérotation des arbres
+  d'après leur position.
+
+## Démarrage
 
 ```bash
 npm install
 npm run dev
 ```
 
-Ouvre http://localhost:5173 dans ton navigateur.
+Puis ouvrir http://localhost:5173.
 
-## Déployer sur GitHub Pages
+## Déploiement
 
-### Option A — Déploiement manuel (simple)
+Chaque push sur `main` lance le workflow `.github/workflows/deploy.yml`, qui construit l'app
+et la publie sur GitHub Pages : https://blayadrien.github.io/PaulowniaApp/
+
+GitHub Pages garde la page en cache jusqu'à 10 minutes : une nouvelle version peut mettre
+ce temps à apparaître sur le téléphone. Vérifier que le build passe avant de pousser :
+
 ```bash
 npm run build
-# Copie le contenu de dist/ dans ton repo GitHub Pages
 ```
 
-### Option B — GitHub Actions (automatique à chaque push)
-Ajoute ce fichier dans `.github/workflows/deploy.yml` :
+## Installation sur téléphone
 
-```yaml
-name: Deploy to GitHub Pages
-on:
-  push:
-    branches: [main]
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm install
-      - run: npm run build
-      - uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-```
+- iOS : Safari, bouton Partager, « Sur l'écran d'accueil »
+- Android : Chrome, menu, « Ajouter à l'écran d'accueil »
+
+## Données et sauvegarde
+
+Les données sont gardées sur le téléphone (`localStorage`, clé `arbre-v7`) et synchronisées
+dans Firebase Firestore une fois connecté avec Google (Réglages). Sans connexion réseau,
+les modifications sont envoyées au retour du réseau.
+L'export JSON (Réglages) reste conseillé de temps en temps comme copie de secours.
 
 ## Structure du projet
 
 ```
 src/
-├── main.jsx                 # Point d'entrée React
-├── App.jsx                  # Composant racine, orchestration
-├── styles/
-│   └── global.css           # Tous les styles
+├── main.jsx               Point d'entrée
+├── App.jsx                Composant racine, navigation et fenêtres
+├── firebase.config.js     Configuration du projet Firebase
+├── styles/global.css      Styles
 ├── hooks/
-│   ├── useData.js           # State global (arbres, journal, météo)
-│   └── useToast.js          # Notifications toast
+│   ├── useData.js         Données (arbres, journal, météo) et synchronisation
+│   └── useToast.js        Notifications
 ├── utils/
-│   ├── constants.js         # HEALTH_DEFS, GRASS_DEFS, etc.
-│   ├── helpers.js           # uid, today, fmt, renumber…
-│   ├── storage.js           # localStorage
-│   └── canvas.js            # Moteur de rendu canvas
+│   ├── constants.js       Santé, herbe, constantes d'affichage
+│   ├── helpers.js         Dates, numérotation, calcul de la grille
+│   ├── storage.js         Stockage local
+│   ├── cloud.js           Connexion Google et Firestore
+│   └── canvas.js          Dessin de la carte
 └── components/
-    ├── PageChamp.jsx        # Vue carte canvas interactive
-    ├── PageListe.jsx        # Liste triable des arbres
-    ├── PageJournal.jsx      # Journal de terrain
-    ├── PageMeteo.jsx        # Relevés météo
-    ├── TreeSheet.jsx        # Formulaire arbre (santé + herbe)
-    ├── GridSheet.jsx        # Placement grille automatique
-    ├── ConfirmSheet.jsx     # Confirmation placement
-    ├── JournalSheet.jsx     # Formulaire entrée journal
-    ├── MeteoSheet.jsx       # Formulaire relevé météo
-    ├── SettingsSheet.jsx    # Export / import / reset
-    ├── Sheet.jsx            # Modal bas générique
-    ├── GrassIcon.jsx        # Icône SVG herbe au pied
-    └── Toast.jsx            # Notification temporaire
+    ├── PageChamp.jsx      Carte du champ
+    ├── PageListe.jsx      Liste des arbres
+    ├── PageJournal.jsx    Journal par catégories
+    ├── PageMeteo.jsx      Météo et récapitulatif mensuel
+    ├── TreeSheet.jsx      Fiche d'un arbre
+    ├── PlaceSheet.jsx     Ajout / déplacement par case
+    ├── GridSheet.jsx      Création d'une grille
+    ├── ConfirmSheet.jsx   Confirmation de placement de grille
+    ├── JournalSheet.jsx   Formulaire du journal
+    ├── MeteoSheet.jsx     Formulaire météo
+    ├── SettingsSheet.jsx  Réglages
+    ├── Sheet.jsx          Fenêtre du bas générique
+    ├── GrassIcon.jsx      Icône herbe au pied
+    └── Toast.jsx          Notification temporaire
 ```
-
-## Installation sur téléphone
-
-**iOS** → Safari → bouton Partager → "Sur l'écran d'accueil"  
-**Android** → Chrome → ⋮ → "Ajouter à l'écran d'accueil"
-
-## Données
-
-Stockées dans `localStorage` (clé `arbre-v7`). Compatible avec les exports JSON de la version précédente.
