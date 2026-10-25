@@ -4,7 +4,7 @@ import { useToast }       from './hooks/useToast'
 import { calcPxPerM }     from './utils/canvas'
 import { uid, today, fmt, planRenumber, cellLabel, treeName } from './utils/helpers'
 import { HEALTH_DEFS, GRASS_DEFS } from './utils/constants'
-import { signIn, signOut } from './utils/cloud'
+import { signIn, signOut, savePhoto, deletePhoto } from './utils/cloud'
 
 import PageChamp    from './components/PageChamp'
 import PageListe    from './components/PageListe'
@@ -105,13 +105,23 @@ export default function App() {
   }
 
   /* ── Journal ── */
-  function handleSaveJournal(formData) {
-    if (!formData.tit && !formData.body) { showToast('⚠️ Titre ou contenu requis'); return }
+  function handleSaveJournal(formData, photoChanges = {}) {
+    if (!formData.tit && !formData.body && !formData.photos?.length) { showToast('⚠️ Titre, contenu ou photo requis'); return }
+    const uid = data.cloud.user?.uid
+    if (uid) {
+      Object.entries(photoChanges.added || {}).forEach(([id, blob]) => { if (formData.photos.includes(id)) savePhoto(uid, id, blob) })
+      ;(photoChanges.removed || []).forEach(id => deletePhoto(uid, id))
+    }
     data.saveJournalEntry(formData, editJid)
     setJOpen(false); setEditJid(null)
     showToast('✅ Entrée enregistrée')
   }
   function handleDeleteJournal(id) {
+    const entry = data.journal.find(e => e.id === id)
+    if (entry?.photos?.length) {
+      if (!confirm(`Supprimer cette entrée et ses ${entry.photos.length} photo(s) ?`)) return
+      entry.photos.forEach(pid => deletePhoto(data.cloud.user?.uid, pid))
+    }
     data.deleteJournalEntry(id)
     showToast('🗑 Entrée supprimée')
   }
@@ -240,6 +250,7 @@ export default function App() {
         />
         <PageJournal
           journal={data.journal} active={tab === 'journal'}
+          uid={data.cloud.user?.uid}
           onAdd={cat => { setEditJid(null); setJCat(cat || ''); setJOpen(true) }}          
           onEdit={id => { setEditJid(id); setJOpen(true) }}
           onDelete={handleDeleteJournal}
@@ -293,6 +304,7 @@ export default function App() {
         open={jOpen}
         editEntry={editJid ? data.journal.find(e => e.id === editJid) : null}
         defaultCat={jCat}
+        uid={data.cloud.user?.uid}
         cats={[...new Set(data.journal.map(e => (e.cat || '').trim()).filter(Boolean))]}
         onClose={() => { setJOpen(false); setEditJid(null) }}
         onSave={handleSaveJournal}

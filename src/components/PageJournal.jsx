@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { fmt } from '../utils/helpers'
+import { Thumb, Lightbox } from './Photos'
 
 const NOCAT = 'Sans catégorie'
 const catKey = e => ((e.cat || '').trim() || NOCAT).toLowerCase()
 const byDateDesc = (a, b) => (b.date || '').localeCompare(a.date || '')
 
-function Entry({ e, showCat, onEdit, onDelete }) {
+function Entry({ e, showCat, uid, onEdit, onDelete, onPhoto }) {
+  const photos = e.photos || []
   return (
     <div className="je">
       <div className="jeh">
@@ -13,7 +15,16 @@ function Entry({ e, showCat, onEdit, onDelete }) {
         <div className="jetit">{e.tit || '(sans titre)'}</div>
         <div className="jedate">{fmt(e.date)}{e.trees ? ` · 🌳 ${e.trees}` : ''}</div>
       </div>
-      <div className="jebody">{e.body || ''}</div>
+      <div className="jebody" style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>{e.body || ''}</div>
+        {photos.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {photos.slice(0, 3).map((id, i) => (
+              <Thumb key={id} uid={uid} id={id} more={i === 2 ? photos.length - 3 : 0} onClick={() => onPhoto(photos, i)} />
+            ))}
+          </div>
+        )}
+      </div>
       <div className="jeact">
         <button className="ja" onClick={() => onEdit(e.id)}>✏️ Modifier</button>
         <button className="ja del" onClick={() => onDelete(e.id)}>🗑 Supprimer</button>
@@ -22,7 +33,8 @@ function Entry({ e, showCat, onEdit, onDelete }) {
   )
 }
 
-export default function PageJournal({ journal, active, onAdd, onEdit, onDelete }) {
+export default function PageJournal({ journal, active, uid, onAdd, onEdit, onDelete }) {
+  const [box, setBox]         = useState(null)        // photos affichées en grand
   const [q, setQ]             = useState('')
   const [openKey, setOpenKey] = useState(null)      // dossier ouvert
   const [order, setOrder]     = useState('recent')  // tri des dossiers
@@ -79,10 +91,10 @@ export default function PageJournal({ journal, active, onAdd, onEdit, onDelete }
           <div className="empty"><div className="ei">📓</div><p>Aucune entrée.<br />Appuyez <strong>＋ Entrée</strong>.</p></div>
         ) : searching ? (
           results.length
-            ? results.map(e => <Entry key={e.id} e={e} showCat onEdit={onEdit} onDelete={onDelete} />)
+            ? results.map(e => <Entry key={e.id} e={e} showCat uid={uid} onEdit={onEdit} onDelete={onDelete} onPhoto={(ids, index) => setBox({ ids, index })} />)
             : <div className="empty"><div className="ei">🔍</div><p>Aucun résultat.</p></div>
         ) : open ? (
-          open.entries.map(e => <Entry key={e.id} e={e} onEdit={onEdit} onDelete={onDelete} />)
+          open.entries.map(e => <Entry key={e.id} e={e} uid={uid} onEdit={onEdit} onDelete={onDelete} onPhoto={(ids, index) => setBox({ ids, index })} />)
         ) : (
           folderList.map(f => (
             <div key={f.key} className="je" onClick={() => setOpenKey(f.key)}
@@ -99,6 +111,8 @@ export default function PageJournal({ journal, active, onAdd, onEdit, onDelete }
           ))
         )}
       </div>
+      {box && <Lightbox uid={uid} ids={box.ids} index={box.index}
+                        onIndex={index => setBox(b => ({ ...b, index }))} onClose={() => setBox(null)} />}
     </div>
   )
 }

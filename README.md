@@ -12,8 +12,10 @@ Elle fonctionne sur téléphone, y compris hors-ligne.
   déjà occupées. Fiche par arbre : hauteur, diamètre, santé, herbe au pied, notes, historique.
 - **Liste** : tous les arbres, triables et filtrables.
 - **Journal** : entrées classées en dossiers par catégorie, du plus récent au plus ancien.
-- **Météo** : relevés (journée, semaine ou période libre) avec température moyenne et pluie.
-  Récapitulatif mois par mois de l'année choisie.
+  Photos jointes : vignettes à côté du texte, affichage en grand au toucher.
+- **Météo** : relevés de précipitations (température moyenne, pluie...) et d'arrosage (litres par arbre,
+  convertis en mm : 1 L sur 1 m² = 1 mm). Récapitulatif mois par mois de l'année choisie,
+  pluie en bleu et arrosage en vert sur la même barre.
 - **Réglages** : connexion au cloud, export/import JSON, export CSV, renumérotation des arbres
   d'après leur position.
 
@@ -65,7 +67,8 @@ src/
 │   ├── constants.js       Santé, herbe, constantes d'affichage
 │   ├── helpers.js         Dates, numérotation, calcul de la grille
 │   ├── storage.js         Stockage local
-│   ├── cloud.js           Connexion Google et Firestore
+│   ├── cloud.js           Connexion Google, Firestore et photos
+│   ├── image.js           Réduction des photos avant envoi
 │   └── canvas.js          Dessin de la carte
 └── components/
     ├── PageChamp.jsx      Carte du champ
@@ -74,6 +77,7 @@ src/
     ├── PageMeteo.jsx      Météo et récapitulatif mensuel
     ├── TreeSheet.jsx      Fiche d'un arbre
     ├── PlaceSheet.jsx     Ajout / déplacement par case
+    ├── Photos.jsx         Vignettes et affichage plein écran
     ├── GridSheet.jsx      Création d'une grille
     ├── ConfirmSheet.jsx   Confirmation de placement de grille
     ├── JournalSheet.jsx   Formulaire du journal

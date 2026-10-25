@@ -5,6 +5,9 @@ import { today, fmt, isoWeek } from '../utils/helpers'
 const WEATHERS = ['☀️','⛅','☁️','🌧️','⛈️','🌨️','🌫️','💨']
 
 export default function MeteoSheet({ open, onClose, onSave }) {
+  const [kind,    setKind]   = useState('rain')   // 'rain' = précipitations · 'water' = arrosage
+  const [water,   setWater]  = useState('')
+  const [area,    setArea]   = useState('1')
   const [ptype,   setPtype]  = useState('day')
   const [d1,      setD1]     = useState(today())
   const [wk,      setWk]     = useState('')
@@ -22,6 +25,7 @@ export default function MeteoSheet({ open, onClose, onSave }) {
     if (open) {
       setD1(today()); setWeather(''); setTavg('')
       setRain(''); setHum(''); setWind(''); setSun(''); setNotes(''); setPtype('day')
+      setKind('rain'); setWater('')
     }
   }, [open])
 
@@ -45,12 +49,27 @@ export default function MeteoSheet({ open, onClose, onSave }) {
   function handleSave() {
     const period = getPeriod()
     if (!period) return
-    onSave({ period, weather, tavg, rain, hum, wind, sun, notes })
+    if (kind === 'water') {
+      if (!water) return
+      onSave({ kind: 'water', period, water, area: area || '1', notes })
+      return
+    }
+    onSave({ kind: 'rain', period, weather, tavg, rain, hum, wind, sun, notes })
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title="🌦️ Nouveau relevé">
+    <Sheet open={open} onClose={onClose} title={kind === 'water' ? '🚿 Nouvel arrosage' : '🌦️ Nouveau relevé'}>
       <div className="fb">
+        <div className="fr full"><div className="fld">
+          <label>Type de relevé</label>
+          <div className="prow">
+            {[['rain','Précipitations'],['water','Arrosage']].map(([k,lbl]) => (
+              <button key={k} className={`ptb${kind === k ? ' sel' : ''}`} onClick={() => setKind(k)}
+                style={kind === k && k === 'water' ? { background: '#3f8f45', borderColor: '#3f8f45' } : undefined}>{lbl}</button>
+            ))}
+          </div>
+        </div></div>
+
         <div className="fr full"><div className="fld">
           <label>Type de période</label>
           <div className="prow">
@@ -67,6 +86,12 @@ export default function MeteoSheet({ open, onClose, onSave }) {
           <div className="fld"><label>Au</label><input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
         </div>}
 
+        {kind === 'water' ? (
+          <div className="fr">
+            <div className="fld"><label>Litres par arbre</label><input type="number" value={water} onChange={e => setWater(e.target.value)} min="0" inputMode="decimal" placeholder="ex : 10" /></div>
+            <div className="fld"><label>Surface arrosée (m²)</label><input type="number" value={area} onChange={e => setArea(e.target.value)} min="0.1" step="0.1" inputMode="decimal" /></div>
+          </div>
+        ) : (<>
         <div className="fr full"><div className="fld">
           <label>Temps</label>
           <div className="wpick">
@@ -85,7 +110,13 @@ export default function MeteoSheet({ open, onClose, onSave }) {
           <div className="fld"><label>Vent (km/h)</label><input type="number" value={wind} onChange={e => setWind(e.target.value)} min="0" inputMode="numeric" /></div>
           <div className="fld"><label>Soleil (h)</label><input type="number" value={sun} onChange={e => setSun(e.target.value)} min="0" max="24" step="0.5" inputMode="decimal" /></div>
         </div>
-        <div className="fr full"><div className="fld"><label>Notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Gelée, grêle, vent fort…" /></div></div>
+        </>)}
+        {kind === 'water' && water && (
+          <div style={{ fontSize: 12, color: '#3f8f45', fontWeight: 600, padding: '0 2px 6px' }}>
+            ≈ {(parseFloat(water) / (parseFloat(area) || 1)).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} mm d'eau au pied
+          </div>
+        )}
+        <div className="fr full"><div className="fld"><label>Notes</label><textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder={kind === 'water' ? 'Arbres arrosés, goutte-à-goutte…' : 'Gelée, grêle, vent fort…'} /></div></div>
       </div>
       <div className="brow">
         <button className="bp" onClick={handleSave}>💾 Enregistrer</button>

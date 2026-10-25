@@ -5,7 +5,7 @@ import {
 } from 'firebase/auth'
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, setDoc, onSnapshot,
+  doc, setDoc, getDoc, deleteDoc, onSnapshot, Bytes,
 } from 'firebase/firestore'
 import { firebaseConfig } from '../firebase.config'
 
@@ -79,4 +79,39 @@ export function watchCloud(uid, onData, onError) {
       fromCache: snap.metadata.fromCache,
     })
   }, onError)
+}
+/* ── Photos du journal ──────────────────────────────────────────────
+   Une photo = un document users/{uid}/photos/{id} : { img: <octets JPEG>, type, createdAt }.
+   Stockées dans Firestore (forfait gratuit), gardées en cache sur le téléphone. */
+
+const photoDoc = (uid, id) => doc(db, 'users', uid, 'photos', id)
+const photoUrls = new Map()   // id → URL affichable (cache mémoire)
+
+export function rememberPhoto(id, blob) {
+  photoUrls.set(id, URL.createObjectURL(blob))
+}
+
+/* Envoi sans attendre le réseau : hors-ligne, l'envoi part au retour de la connexion */
+export async function savePhoto(uid, id, blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  rememberPhoto(id, blob)
+  setDoc(photoDoc(uid, id), { img: Bytes.fromUint8Array(bytes), type: blob.type || 'image/jpeg', createdAt: Date.now() })
+    .catch(err => console.warn('Photo non enregistrée', id, err))
+}
+
+export async function loadPhoto(uid, id) {
+  if (photoUrls.has(id)) return photoUrls.get(id)
+  if (!db || !uid) return null
+  const snap = await getDoc(photoDoc(uid, id))
+  if (!snap.exists()) return null
+  const d = snap.data()
+  const url = URL.createObjectURL(new Blob([d.img.toUint8Array()], { type: d.type || 'image/jpeg' }))
+  photoUrls.set(id, url)
+  return url
+}
+
+export function deletePhoto(uid, id) {
+  photoUrls.delete(id)
+  if (!db || !uid) return
+  deleteDoc(photoDoc(uid, id)).catch(err => console.warn('Photo non supprimée', id, err))
 }
